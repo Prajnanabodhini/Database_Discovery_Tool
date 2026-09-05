@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{{ title }} · MSSQL Documenter</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/details.css') }}">
+  <script defer src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/browser.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/compare.js') }}"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <a class="brand" href="{{ url_for('pages.dashboard') }}"><span class="brand-mark">DB</span><span>MSSQL Documenter<small>read-only control plane</small></span></a>
+      <nav aria-label="Primary"><a href="{{ url_for('pages.dashboard') }}">Dashboard</a><a href="{{ url_for('pages.browser', root='output') }}">Output evidence</a><a href="{{ url_for('pages.browser', root='git_export') }}">Git export</a><a href="{{ url_for('pages.compare_page') }}">Compare runs</a><a href="{{ url_for('pages.help_page') }}">Help</a></nav>
+      <span class="safety-pill">● localhost · read only</span>
+    </aside>
+    <div class="app-content">
+      <header class="contextbar"><div><span class="context-label">Current workspace</span><strong>{% block page_context %}{{ title }}{% endblock %}</strong></div><span class="context-safety">Guarded local session</span></header>
+      <main class="shell">{% block content %}{% endblock %}</main>
+      <footer>Local application bound to loopback only. No arbitrary SQL or shell execution.</footer>
+    </div>
+  </div>
+</body>
+</html>

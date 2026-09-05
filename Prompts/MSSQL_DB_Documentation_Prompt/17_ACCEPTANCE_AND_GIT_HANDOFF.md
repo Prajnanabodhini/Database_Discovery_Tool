@@ -1,0 +1,2 @@
+# Acceptance / Git Handoff
+Approve only if no write/admin/execution capability exists; secrets/PII are protected; whole schema/programming objects/sizes/shapes/samples/relationships/lineage/pipelines/quality/risks/coverage/errors are documented; inferred vs declared is clear; cross-db/server refs and limitations are visible; manifest/checksums exist; git_export excludes .env, secrets and raw sensitive data.

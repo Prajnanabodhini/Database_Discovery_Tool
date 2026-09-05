@@ -1,0 +1,31 @@
+{
+  "pack_name": "SchoolERP Generic MSSQL Database Documenter Prompt Pack",
+  "version": "2.0",
+  "date": "2026-08-31",
+  "purpose": "Build a reusable generic Python whole-MSSQL discovery/profile/lineage/documentation engine",
+  "files": [
+    "00_README.md",
+    "01_MASTER_BUILD_PROMPT.md",
+    "02_SECURITY_READ_ONLY_GUARDRAILS.md",
+    "03_CONNECTION_MULTI_DATABASE_CONFIG.md",
+    "04_FULL_SCHEMA_METADATA.md",
+    "05_PROGRAMMABLE_OBJECTS.md",
+    "06_TABLE_SIZE_SHAPE_PROFILING.md",
+    "07_COLUMN_DATA_PROFILING.md",
+    "08_SAFE_SAMPLE_DATA.md",
+    "09_SENSITIVE_DATA_DETECTION_MASKING.md",
+    "10_RELATIONSHIP_CARDINALITY_ORPHANS.md",
+    "11_DEPENDENCY_LINEAGE_PIPELINES.md",
+    "12_CROSS_DATABASE_SERVER_REFERENCES.md",
+    "13_OBJECT_CLASSIFICATION_DUPLICATES.md",
+    "14_DATA_QUALITY_RISK_ANALYSIS.md",
+    "15_DOCUMENTATION_OUTPUT_CONTRACT.md",
+    "16_PRE_RUN_SAFETY_REVIEW.md",
+    "17_ACCEPTANCE_AND_GIT_HANDOFF.md",
+    "18_MULTI_DATABASE_COMPARISON.md",
+    "19_REQUIRED_OUTPUT_FILES.md",
+    "20_ENV_EXAMPLE.txt",
+    "21_OPTIONAL_FINAL_CODE_REVIEW_PROMPT.md"
+  ],
+  "prompt_file_count": 22
+}

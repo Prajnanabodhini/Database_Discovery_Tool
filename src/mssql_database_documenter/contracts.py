@@ -1,0 +1,95 @@
+"""Stable artifact contract shared by all discovery stages."""
+
+from __future__ import annotations
+
+
+EVIDENCE_CLASSES = frozenset({"FACT", "DATA_VALIDATION", "INFERENCE", "UNKNOWN"})
+
+
+REQUIRED_OUTPUTS: dict[str, str] = {
+    "MSSQL_EXECUTIVE_SUMMARY.md": "01_Executive_Summary",
+    "DATABASE_OVERVIEW.md": "02_Server_Database",
+    "DATABASE_SUMMARY_METRICS.json": "02_Server_Database",
+    "DATABASE_GLOSSARY.md": "02_Server_Database",
+    "DISCOVERY_COVERAGE.md": "00_Run_Metadata",
+    "DISCOVERY_ERRORS.csv": "00_Run_Metadata",
+    "SCHEMA_CATALOGUE.csv": "03_Schemas",
+    "TABLE_CATALOGUE.csv": "04_Tables",
+    "COLUMN_CATALOGUE.csv": "05_Columns",
+    "PRIMARY_KEYS.csv": "06_Keys_Relationships",
+    "FOREIGN_KEYS.csv": "06_Keys_Relationships",
+    "INFERRED_RELATIONSHIPS.csv": "06_Keys_Relationships",
+    "RELATIONSHIP_CARDINALITY.csv": "06_Keys_Relationships",
+    "ORPHAN_ANALYSIS.csv": "06_Keys_Relationships",
+    "INDEX_CATALOGUE.csv": "07_Indexes_Constraints",
+    "CONSTRAINT_CATALOGUE.csv": "07_Indexes_Constraints",
+    "TABLE_SIZE_PROFILE.csv": "04_Tables",
+    "TABLE_SHAPE_PROFILE.csv": "04_Tables",
+    "COLUMN_PROFILE.csv": "13_Data_Profiling",
+    "VIEW_CATALOGUE.csv": "08_Views",
+    "VIEW_DEPENDENCIES.csv": "08_Views",
+    "STORED_PROCEDURE_CATALOGUE.csv": "09_Stored_Procedures",
+    "STORED_PROCEDURE_DEPENDENCIES.csv": "09_Stored_Procedures",
+    "FUNCTION_CATALOGUE.csv": "10_Functions",
+    "TRIGGER_CATALOGUE.csv": "11_Triggers",
+    "SYNONYM_CATALOGUE.csv": "12_Synonyms_Sequences",
+    "SEQUENCE_CATALOGUE.csv": "12_Synonyms_Sequences",
+    "EXTENDED_PROPERTIES.csv": "05_Columns",
+    "OBJECT_DEPENDENCIES.csv": "15_Lineage",
+    "LINEAGE_EDGES.csv": "15_Lineage",
+    "LINEAGE_SUMMARY.md": "15_Lineage",
+    "PIPELINE_CATALOGUE.csv": "16_Pipelines",
+    "PIPELINE_SUMMARY.md": "16_Pipelines",
+    "DATA_QUALITY_SUMMARY.md": "17_Data_Quality",
+    "POSSIBLE_MASTER_TABLES.csv": "17_Data_Quality",
+    "POSSIBLE_LOOKUP_TABLES.csv": "17_Data_Quality",
+    "POSSIBLE_TRANSACTION_TABLES.csv": "17_Data_Quality",
+    "POSSIBLE_BRIDGE_TABLES.csv": "17_Data_Quality",
+    "POSSIBLE_HISTORY_AUDIT_TABLES.csv": "17_Data_Quality",
+    "POSSIBLE_DUPLICATE_OR_LEGACY_STRUCTURES.md": "17_Data_Quality",
+    "HIGH_IMPACT_OBJECTS.csv": "15_Lineage",
+    "RISK_AND_UNCERTAINTY_REGISTER.csv": "18_Risks_Uncertainties",
+    "ACCESS_AND_DISCOVERY_LIMITATIONS.md": "18_Risks_Uncertainties",
+    "manifest.json": "00_Run_Metadata",
+    "checksums.sha256": "00_Run_Metadata",
+    "SAFE_TO_COMMIT_CHECKLIST.md": "99_Git_Handoff",
+}
+
+
+EXTRA_OUTPUTS: dict[str, str] = {
+    "SENSITIVITY_CLASSIFICATION.csv": "13_Data_Profiling",
+    "MASKING_REPORT.csv": "14_Samples",
+    "CROSS_DATABASE_SERVER_REFERENCES.csv": "15_Lineage",
+    "SQL_AGENT_JOB_CATALOGUE.csv": "16_Pipelines",
+    "PARAMETER_CATALOGUE.csv": "09_Stored_Procedures",
+    "TABLES_WITHOUT_PRIMARY_KEY.csv": "17_Data_Quality",
+    "FULL_ER_DIAGRAM.md": "19_Diagrams",
+    "STAGE_STATUS.json": "00_Run_Metadata",
+    "RUN_CONFIGURATION.json": "00_Run_Metadata",
+    "LOW_CARDINALITY_VALUES.csv": "13_Data_Profiling",
+    "OTHER_STRUCTURAL_CLASSIFICATIONS.csv": "17_Data_Quality",
+    "SAMPLE_INDEX.csv": "14_Samples",
+    "LINKED_SERVER_CATALOGUE.csv": "15_Lineage",
+    "run_summary.json": "00_Run_Metadata",
+    "MSSQL_DOCUMENTATION_REPORT.html": "21_HTML_Report",
+}
+
+
+DISCOVERY_CAPABILITY_MATRIX: dict[str, tuple[str, ...]] = {
+    "server_database_metadata": ("DATABASE_OVERVIEW.md", "DATABASE_SUMMARY_METRICS.json"),
+    "schemas": ("SCHEMA_CATALOGUE.csv",), "tables_columns": ("TABLE_CATALOGUE.csv", "COLUMN_CATALOGUE.csv"),
+    "keys_relationships": ("PRIMARY_KEYS.csv", "FOREIGN_KEYS.csv", "INFERRED_RELATIONSHIPS.csv"),
+    "constraints_indexes": ("CONSTRAINT_CATALOGUE.csv", "INDEX_CATALOGUE.csv"),
+    "storage_rows_shapes": ("TABLE_SIZE_PROFILE.csv", "TABLE_SHAPE_PROFILE.csv"),
+    "profiles_samples": ("COLUMN_PROFILE.csv", "SAMPLE_INDEX.csv", "MASKING_REPORT.csv"),
+    "programmable_objects": ("VIEW_CATALOGUE.csv", "STORED_PROCEDURE_CATALOGUE.csv", "FUNCTION_CATALOGUE.csv", "TRIGGER_CATALOGUE.csv"),
+    "synonyms_sequences": ("SYNONYM_CATALOGUE.csv", "SEQUENCE_CATALOGUE.csv"),
+    "computed_columns_extended_properties": ("COLUMN_CATALOGUE.csv", "EXTENDED_PROPERTIES.csv"),
+    "agent_jobs": ("SQL_AGENT_JOB_CATALOGUE.csv",),
+    "dependencies_lineage": ("OBJECT_DEPENDENCIES.csv", "LINEAGE_EDGES.csv"),
+    "pipelines_external_references": ("PIPELINE_CATALOGUE.csv", "CROSS_DATABASE_SERVER_REFERENCES.csv"),
+    "cardinality_orphans": ("RELATIONSHIP_CARDINALITY.csv", "ORPHAN_ANALYSIS.csv"),
+    "quality_classification_duplicates": ("DATA_QUALITY_SUMMARY.md", "OTHER_STRUCTURAL_CLASSIFICATIONS.csv", "POSSIBLE_DUPLICATE_OR_LEGACY_STRUCTURES.md"),
+    "high_connectivity": ("HIGH_IMPACT_OBJECTS.csv",),
+    "manifests_checksums_errors": ("manifest.json", "checksums.sha256", "DISCOVERY_ERRORS.csv"),
+}

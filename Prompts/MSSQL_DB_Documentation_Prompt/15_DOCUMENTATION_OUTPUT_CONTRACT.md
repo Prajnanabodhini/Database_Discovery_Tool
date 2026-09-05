@@ -1,0 +1,2 @@
+# Output Contract Prompt
+Generate timestamped per-DB folders for run metadata, summary, server/database, schemas, tables, columns, relationships, indexes/constraints, views, SPs, functions, triggers, synonyms/sequences, profiling, samples, lineage, pipelines, quality, risks, diagrams, per-object docs and Git handoff. Required machine-readable and narrative files are specified in master prompt. Always generate coverage/errors/manifest/checksums.

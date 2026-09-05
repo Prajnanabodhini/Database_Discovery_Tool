@@ -1,0 +1,6 @@
+"""Relationship evidence vocabulary used by the discovery pipeline."""
+
+RELATIONSHIP_CLASSIFICATIONS = frozenset({"DECLARED_FK", "SCHEMA_INFERRED", "DATA_VALIDATED"})
+CARDINALITY_CLASSIFICATIONS = frozenset({"1:1", "N:1", "N:N_BRIDGE_CANDIDATE", "UNKNOWN"})
+
+__all__ = ("CARDINALITY_CLASSIFICATIONS", "RELATIONSHIP_CLASSIFICATIONS")

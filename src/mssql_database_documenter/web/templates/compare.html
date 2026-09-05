@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">Structural timeline</p><h1>Compare two or three runs</h1><p>Review evidence changes without inferring causality or business equivalence.</p></div></section>
+<section class="guidance-strip"><div><strong>Run A</strong><span>Usually the oldest baseline.</span></div><div><strong>Run B</strong><span>The next point in time.</span></div><div><strong>Run C</strong><span>Optional newest point in time.</span></div></section>
+<section class="panel" id="compare-workspace">
+  <details class="help-details" open><summary>How to make a meaningful comparison</summary><p>Choose runs from the same database and compatible discovery modes whenever possible. Mixed databases or missing evidence are allowed but produce warnings. “Compare in browser” keeps results in memory. “Compare and export” explicitly writes HTML, CSV, and JSON files.</p><p><strong>Important:</strong> ADDED, REMOVED, and CHANGED describe evidence differences only. They do not explain cause, impact, or whether differently named objects are business equivalents.</p></details>
+  <div class="compare-selectors">
+  {% for label in ['A','B','C'] %}
+    <label>Run {{ label }}{% if label == 'C' %} <small>optional</small>{% endif %}
+      <select id="run-{{ label|lower }}"><option value="">Select a run</option>{% for run in runs %}<option value="{{ run.ref }}" data-database="{{ run.database }}" data-mode="{{ run.mode }}" data-status="{{ run.status }}" data-version="{{ run.tool_version }}" data-timestamp="{{ run.timestamp_utc }}" data-server="{{ run.server_alias }}" data-sql-version="{{ run.sql_server_version }}" data-sample-rows="{{ run.sample_rows }}" data-coverage="{{ run.coverage }}" data-errors="{{ run.error_count }}" data-warnings="{{ run.warning_count }}">{{ run.database }} / {{ run.run_id }} / {{ run.mode }}{% if run.sanitized %} / Git-safe{% endif %}</option>{% endfor %}</select>
+      <article id="run-{{ label|lower }}-metadata" class="run-metadata-card"><strong>No run selected</strong><span>Select a manifested output or compatible Git export.</span></article>
+    </label>
+  {% endfor %}
+  </div>
+  <div class="toolbar"><button id="compare-now">Compare in browser</button><button id="compare-export" class="secondary">Compare and export HTML/CSV/JSON</button></div>
+  <div id="compare-message" aria-live="polite"></div>
+</section>
+<section class="panel" id="compare-results" hidden>
+  <div class="panel-heading"><div><p class="eyebrow">Comparison result</p><h2 id="compare-title">Timeline</h2></div><label>Object type<select id="compare-category"></select></label></div>
+  <p id="compare-semantic-note" class="range"></p><div id="compare-warnings"></div><div class="summary-strip" id="compare-summary"></div>
+  <div class="compare-filter-grid">
+    <label>Status<select id="compare-status"><option value="">All statuses</option><option value="CHANGED_ONLY">Changed only</option><option value="ADDED">Added</option><option value="REMOVED">Removed</option><option value="UNCHANGED">Unchanged</option><option value="NOT_AVAILABLE">Not available</option><option value="NOT_COMPARABLE">Not comparable</option></select></label>
+    <label>Object search<input id="compare-search" type="search" placeholder="Name or identity"></label><label>Schema<input id="compare-schema" type="search" placeholder="Schema"></label>
+    <label>Severity<select id="compare-severity"><option value="">All severities</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option><option>Informational</option></select></label>
+    <label>Database<select id="compare-database"><option value="">All selected databases</option></select></label><label class="checkbox-label"><input id="compare-issues" type="checkbox"> Warnings/errors only</label>
+  </div>
+  <details class="help-details"><summary>Understand filters and result columns</summary><p>Status limits change types. Object search and Schema narrow identities. Severity applies only to evidence carrying severity. Warnings/errors only focuses on operational issues. A-to-B, B-to-C, and A-to-C show interval results; numeric deltas are arithmetic only when compatible values exist.</p></details>
+  <div id="compare-source-links" class="source-links"></div><p id="compare-range" class="range"></p>
+  <div class="table-scroll"><table><thead><tr><th>Object</th><th>Run A</th><th>Run B</th><th>Run C</th><th>A to B</th><th>B to C</th><th>A to C</th><th>Numeric values/deltas</th><th>Definition comparisons</th></tr></thead><tbody id="compare-rows"></tbody></table></div>
+  <nav class="pager" id="compare-pager" aria-label="Comparison pages"><button class="secondary" id="compare-previous" type="button">Previous</button><span id="compare-page">Page 1</span><button class="secondary" id="compare-next" type="button">Next</button></nav>
+</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+{
+  "pack_name": "SchoolERP MSSQL Documenter v3 Web UI Prompt Pack",
+  "version": "3.0",
+  "date": "2026-08-31",
+  "purpose": "Repair/rebuild generic MSSQL documenter with main.py, lazy outputs, local Web UI and 2/3-run comparison",
+  "prompt_files": [
+    "00_FINE_COMB_AUDIT_FINDINGS.md",
+    "00_START_HERE.md",
+    "01_MASTER_REBUILD_OR_REPAIR_PROMPT.md",
+    "02_MAIN_ENTRYPOINT_AND_WINDOWS_LAUNCHERS.md",
+    "03_LAZY_OUTPUT_AND_GIT_EXPORT.md",
+    "04_WEB_UI_ARCHITECTURE_AND_SECURITY.md",
+    "05_WEB_EXECUTION_AND_JOB_MANAGER.md",
+    "06_OUTPUT_AND_GIT_EXPORT_BROWSER.md",
+    "07_FORMATTED_RENDERERS_NO_DATA_LOSS.md",
+    "08_RUN_REGISTRY_AND_METADATA.md",
+    "09_TWO_AND_THREE_RUN_COMPARISON_ENGINE.md",
+    "10_COMPARISON_HTML_UI.md",
+    "11_GENERIC_MSSQL_DISCOVERY_REQUIREMENTS.md",
+    "12_READ_ONLY_AND_PRODUCTION_SAFETY.md",
+    "13_ENV_CONFIGURATION_V3.md",
+    "14_HTML_PRESENTATION_DESIGN.md",
+    "15_TEST_AND_ACCEPTANCE_MATRIX.md",
+    "16_FINAL_CODE_REVIEW_PROMPT.md",
+    "17_EXPECTED_PROJECT_TREE.md",
+    "18_OPERATOR_RUN_GUIDE.md",
+    "19_REQUIRED_HTML_FEATURES_CHECKLIST.md",
+    "20_REQUIRED_OUTPUT_AND_GIT_EXPORT_CONTRACT.md",
+    "21_ENV_EXAMPLE_V3.txt"
+  ],
+  "file_count": 23
+}
