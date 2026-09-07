@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from mssql_database_documenter.evidence_safety import audit_run_evidence
-from mssql_database_documenter.git_export import GitExportError, create_git_export
+from mssql_database_documenter.git_export import create_git_export
 
 
 def write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, object]]) -> None:
@@ -56,6 +56,16 @@ class EvidenceSafetyTests(unittest.TestCase):
             self.assertTrue(audit.passed, audit.violations)
             self.assertEqual(audit.sensitive_values_checked, 3)
 
+    def test_staged_audit_requires_git_profile_policy_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = write_profile_run(Path(directory), "[MASKED:0123456789abcdef]")
+            audit = audit_run_evidence(run, require_git_export_policy=True)
+            self.assertFalse(audit.passed)
+            self.assertIn(
+                "Git export profile-value policy record is required",
+                audit.violations,
+            )
+
     def test_final_catalogue_classification_catches_earlier_unknown_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             run = write_profile_run(Path(directory), "Alice Example")
@@ -67,13 +77,21 @@ class EvidenceSafetyTests(unittest.TestCase):
             self.assertFalse(audit.passed)
             self.assertFalse(audit.checks["profile_values_masked"])
 
-    def test_unsafe_git_export_is_rejected_without_partial_target(self) -> None:
+    def test_git_export_sanitizes_raw_profile_value_without_mutating_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             run = write_profile_run(base, "person@example.test")
-            with self.assertRaises(GitExportError):
-                create_git_export(run, output_root=base / "output", git_export_root=base / "git_export")
-            self.assertFalse((base / "git_export").exists())
+            source = run / "13_Data_Profiling" / "COLUMN_PROFILE.csv"
+            before = source.read_bytes()
+            exported = create_git_export(
+                run, output_root=base / "output", git_export_root=base / "git_export",
+            )
+            self.assertEqual(source.read_bytes(), before)
+            exported_text = (
+                exported / "13_Data_Profiling" / "COLUMN_PROFILE.csv"
+            ).read_text(encoding="utf-8-sig")
+            self.assertNotIn("person@example.test", exported_text)
+            self.assertTrue(audit_run_evidence(exported).passed)
 
 
 if __name__ == "__main__":

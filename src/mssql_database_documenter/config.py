@@ -16,6 +16,7 @@ TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 VALID_MODES = frozenset({"metadata", "metadata+logic", "safe-profile", "full-readonly"})
 VALID_GIT_EXPORT_SAMPLE_POLICIES = frozenset({"exclude", "masked_only"})
+VALID_GIT_EXPORT_PROFILE_VALUE_POLICIES = frozenset({"mask_unknown_text", "aggregate_only"})
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
@@ -105,6 +106,7 @@ class Settings:
     enable_three_run_comparison: bool = True
     sensitivity_overrides_file: Path = Path("config/sensitivity_overrides.toml")
     git_export_sample_policy: str = "exclude"
+    git_export_profile_value_policy: str = "mask_unknown_text"
 
     @classmethod
     def from_environment(
@@ -131,6 +133,13 @@ class Settings:
         git_export_sample_policy = _get(merged, "GIT_EXPORT_SAMPLE_POLICY", "exclude").strip().casefold()
         if git_export_sample_policy not in VALID_GIT_EXPORT_SAMPLE_POLICIES:
             raise ConfigurationError("GIT_EXPORT_SAMPLE_POLICY must be exclude or masked_only")
+        git_export_profile_value_policy = _get(
+            merged, "GIT_EXPORT_PROFILE_VALUE_POLICY", "mask_unknown_text"
+        ).strip().casefold()
+        if git_export_profile_value_policy not in VALID_GIT_EXPORT_PROFILE_VALUE_POLICIES:
+            raise ConfigurationError(
+                "GIT_EXPORT_PROFILE_VALUE_POLICY must be mask_unknown_text or aggregate_only; raw is never allowed"
+            )
 
         legacy_sample_enabled = _parse_bool(_get(merged, "PROFILE_INCLUDE_SAMPLE_DATA", "true"), "PROFILE_INCLUDE_SAMPLE_DATA")
         legacy_sample_rows = _parse_int(_get(merged, "PROFILE_SAMPLE_ROWS", "100"), "PROFILE_SAMPLE_ROWS", minimum=1)
@@ -180,6 +189,7 @@ class Settings:
             enable_three_run_comparison=_parse_bool(_get(merged, "ENABLE_THREE_RUN_COMPARISON", "true"), "ENABLE_THREE_RUN_COMPARISON"),
             sensitivity_overrides_file=Path(_get(merged, "SENSITIVITY_OVERRIDES_FILE", "config/sensitivity_overrides.toml")),
             git_export_sample_policy=git_export_sample_policy,
+            git_export_profile_value_policy=git_export_profile_value_policy,
         )
 
     def with_database_override(self, database: str | None) -> "Settings":
@@ -262,4 +272,5 @@ class Settings:
             "enable_three_run_comparison": self.enable_three_run_comparison,
             "sensitivity_overrides_file": str(self.sensitivity_overrides_file),
             "git_export_sample_policy": self.git_export_sample_policy,
+            "git_export_profile_value_policy": self.git_export_profile_value_policy,
         }

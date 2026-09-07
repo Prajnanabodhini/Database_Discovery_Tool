@@ -205,7 +205,6 @@ class LineageStagesMixin:
         _csv(self.artifact("HIGH_IMPACT_OBJECTS.csv"), tuple(impact[0]) if impact else ("object_name", "inbound", "outbound", "total_edges", "interpretation"), impact)
 
     @staticmethod
-    @staticmethod
     def _programmable_headers(name: str) -> tuple[str, ...]:
         common = ("server_name", "database_name", "schema_name", "object_name", "object_id")
         if name == "dependencies":

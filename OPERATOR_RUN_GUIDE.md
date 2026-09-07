@@ -158,6 +158,24 @@ If the stored evidence is stale or incomplete, perform a new approved discovery
 instead. A regenerated report is a presentation copy, not a sanitized Git export;
 the separate Git-export safety review still applies to canonical runs.
 
+The equivalent console action is:
+
+```powershell
+.\.venv\Scripts\python.exe main.py regenerate-reports --run "output:School/run_20260907_120000"
+```
+
+You may also supply the contained path of the manifested run. This command is
+offline and presentation-only. By contrast, these commands connect to MSSQL and
+create a new discovery run with its normal reports:
+
+```powershell
+.\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env --mode safe-profile all
+.\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env --mode safe-profile discover-and-report
+```
+
+The former `report` command is no longer accepted because its name did not reveal
+that it started a live database discovery.
+
 ## Stop and recovery
 
 - **Cancel safely** requests cancellation at the next stage boundary; it does not kill an in-flight ODBC call.

@@ -25,6 +25,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.web_host, "127.0.0.1")
         self.assertEqual(settings.max_concurrent_discovery_jobs, 1)
         self.assertEqual(settings.git_export_sample_policy, "exclude")
+        self.assertEqual(settings.git_export_profile_value_policy, "mask_unknown_text")
         self.assertTrue(settings.sample_tables)
         self.assertTrue(settings.sample_views)
         self.assertTrue(settings.sample_large_tables)
@@ -140,6 +141,18 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(masked.git_export_sample_policy, "masked_only")
         with self.assertRaises(ConfigurationError):
             Settings.from_environment(env={"GIT_EXPORT_SAMPLE_POLICY": "raw"}, dotenv_path=None)
+
+    def test_git_export_profile_value_policy_defaults_secure_and_rejects_raw(self) -> None:
+        default = Settings.from_environment(env={}, dotenv_path=None)
+        aggregate = Settings.from_environment(
+            env={"GIT_EXPORT_PROFILE_VALUE_POLICY": "AGGREGATE_ONLY"}, dotenv_path=None,
+        )
+        self.assertEqual(default.git_export_profile_value_policy, "mask_unknown_text")
+        self.assertEqual(aggregate.git_export_profile_value_policy, "aggregate_only")
+        with self.assertRaises(ConfigurationError):
+            Settings.from_environment(
+                env={"GIT_EXPORT_PROFILE_VALUE_POLICY": "raw"}, dotenv_path=None,
+            )
 
     def test_canonical_sampling_settings_and_legacy_fallback(self) -> None:
         canonical = Settings.from_environment(

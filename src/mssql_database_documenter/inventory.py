@@ -30,6 +30,10 @@ OUTPUT_FOLDERS = (
     "16_Pipelines", "17_Data_Quality", "18_Risks_Uncertainties", "19_Diagrams",
     "20_Object_Documentation", "21_HTML_Report", "99_Git_Handoff",
 )
+ERROR_COLUMNS = (
+    "stage", "database", "schema_name", "object_name", "query_name", "error_type",
+    "sanitized_message", "impact", "continuation",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +134,10 @@ def _write_manifest_and_checksums(
     database: str,
     settings: Settings,
     errors: list[dict[str, object]],
+    *,
+    status: str | None = None,
+    completed_stages: Iterable[str] | None = None,
+    stage_status: list[dict[str, object]] | None = None,
 ) -> None:
     policy = resolve_mode_policy(settings, "metadata")
     configuration = {
@@ -142,19 +150,24 @@ def _write_manifest_and_checksums(
     manifest_path = run_directory / "00_Run_Metadata" / "manifest.json"
     checksum_path = run_directory / "00_Run_Metadata" / "checksums.sha256"
     summary_path = run_directory / "00_Run_Metadata" / "run_summary.json"
+    resolved_status = status or ("COMPLETED_WITH_WARNINGS" if errors else "COMPLETED")
+    resolved_completed = list(completed_stages) if completed_stages is not None else ["connection", "metadata"]
+    is_failed = resolved_status in {"FAILED", "PARTIAL"}
+    error_count = len(errors) if is_failed else 0
+    warning_count = 0 if resolved_status == "FAILED" else len(errors)
     summary_path.write_text(json.dumps({
         "run_id": run_id, "database": database, "server_alias": settings.sanitized()["server"],
         "timestamp_utc": datetime.now(timezone.utc).isoformat(), "mode": "metadata",
-        "status": "COMPLETED_WITH_WARNINGS" if errors else "COMPLETED", "tool_version": __version__,
+        "status": resolved_status, "tool_version": __version__,
         "sql_server_version": "UNKNOWN",
         "sample_rows": policy.sample_row_limit, "exact_row_counts": policy.exact_counts,
         "mask_sensitive_data": settings.profile_mask_sensitive_data,
         "profile_settings": {"sample_rows": policy.sample_row_limit, "include_sample_data": policy.samples, "sample_tables": policy.sample_tables, "sample_views": policy.sample_views, "sample_large_tables": policy.sample_large_tables, "mask_sensitive_data": settings.profile_mask_sensitive_data, "exact_row_counts": policy.exact_counts, "exact_row_count_threshold": policy.exact_count_ceiling, "large_table_threshold": policy.profile_row_threshold},
         "resolved_mode_policy": policy.as_dict(),
-        "completed_stage_count": 2,
-        "completion_coverage": "2/2",
-        "error_count": 0, "warning_count": len(errors),
-        "warning_error_count": len(errors),
+        "completed_stage_count": len(resolved_completed),
+        "completion_coverage": f"{len(resolved_completed)}/2",
+        "error_count": error_count, "warning_count": warning_count,
+        "warning_error_count": error_count + warning_count,
     }, indent=2, default=str) + "\n", encoding="utf-8")
     existing = sorted(
         path.relative_to(run_directory).as_posix()
@@ -175,8 +188,12 @@ def _write_manifest_and_checksums(
         "configuration": configuration,
         "resolved_mode_policy": policy.as_dict(),
         "database": database,
-        "completed_stages": ["connection", "metadata"],
-        "warnings": [str(item["sanitized_message"]) for item in errors],
+        "status": resolved_status,
+        "completed_stages": resolved_completed,
+        "stages": list(stage_status or []),
+        "errors": error_count,
+        "warnings": [] if resolved_status == "FAILED" else [str(item["sanitized_message"]) for item in errors],
+        "failure_errors": [str(item["sanitized_message"]) for item in errors] if is_failed else [],
         "files": files,
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, default=str) + "\n", encoding="utf-8")
@@ -185,6 +202,42 @@ def _write_manifest_and_checksums(
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         lines.append(f"{digest}  {path.relative_to(run_directory).as_posix()}")
     checksum_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_inventory_control_evidence(
+    run_directory: Path,
+    run_id: str,
+    database: str,
+    settings: Settings,
+    errors: list[dict[str, object]],
+    *,
+    status: str,
+    completed_stages: Iterable[str],
+    stage_status: list[dict[str, object]],
+) -> None:
+    """Persist a truthful recoverable lifecycle state for every reserved run root."""
+    metadata_root = run_directory / "00_Run_Metadata"
+    metadata_root.mkdir(parents=True, exist_ok=True)
+    _write_csv(metadata_root / "DISCOVERY_ERRORS.csv", ERROR_COLUMNS, errors)
+    policy = resolve_mode_policy(settings, "metadata")
+    configuration = {
+        **settings.sanitized(),
+        "requested_discovery_mode": settings.discovery_mode,
+        "discovery_mode": "metadata",
+        "resolved_mode_policy": policy.as_dict(),
+    }
+    (metadata_root / "RUN_CONFIGURATION.json").write_text(
+        json.dumps(configuration, indent=2, default=str) + "\n", encoding="utf-8"
+    )
+    (metadata_root / "STAGE_STATUS.json").write_text(
+        json.dumps(stage_status, indent=2, default=str) + "\n", encoding="utf-8"
+    )
+    _write_manifest_and_checksums(
+        run_directory, run_id, database, settings, errors,
+        status=status,
+        completed_stages=completed_stages,
+        stage_status=stage_status,
+    )
 
 
 def run_inventory(settings: Settings, database: str) -> InventoryResult:
@@ -197,51 +250,109 @@ def run_inventory(settings: Settings, database: str) -> InventoryResult:
     attempted_queries = list(METADATA_QUERIES)
     if settings.discover_security_metadata:
         attempted_queries.extend(SECURITY_METADATA_QUERIES)
-    else:
-        for query in SECURITY_METADATA_QUERIES:
-            _write_csv(run_directory / query.output_folder / query.output_name, query.columns, [])
-            support_rows.append(support_record(query, row_count=0, state="DISABLED"))
-
-    with connect(settings, database) as connection:
-        cursor = ReadOnlyCursor(connection.cursor())
-        for query in attempted_queries:
-            output_path = run_directory / query.output_folder / query.output_name
-            try:
-                rows = _fetch(cursor, query)
-                row_counts[query.name] = len(rows)
-                _write_csv(output_path, query.columns, rows)
-                if query.feature_family:
-                    support_rows.append(support_record(query, row_count=len(rows)))
-            except Exception as exc:
-                row_counts[query.name] = 0
-                errors.append({
-                    "stage": query.stage,
-                    "database": database,
-                    "schema_name": "",
-                    "object_name": "",
-                    "query_name": query.name,
-                    "error_type": type(exc).__name__,
-                    "sanitized_message": redact_text(exc, sensitive_values=sensitive_values),
-                    "impact": f"{query.output_name} contains headers only",
-                    "continuation": "Independent metadata queries continued",
-                })
-                _write_csv(output_path, query.columns, [])
-                if query.feature_family:
-                    state = "UNSUPPORTED" if is_unsupported_metadata_error(exc) else "INACCESSIBLE"
-                    support_rows.append(support_record(query, row_count=0, state=state))
-
-    error_columns = (
-        "stage", "database", "schema_name", "object_name", "query_name", "error_type",
-        "sanitized_message", "impact", "continuation",
+    started_utc = datetime.now(timezone.utc).isoformat()
+    initial_stages = [
+        {"prompt": "03", "stage": "connection", "status": "PENDING", "started_utc": started_utc, "finished_utc": ""},
+        {"prompt": "04", "stage": "metadata", "status": "PENDING", "started_utc": "", "finished_utc": ""},
+    ]
+    _write_inventory_control_evidence(
+        run_directory, run_id, database, settings, errors,
+        status="INITIALIZING", completed_stages=(), stage_status=initial_stages,
     )
-    _write_csv(run_directory / "00_Run_Metadata" / "DISCOVERY_ERRORS.csv", error_columns, errors)
+
+    connection_established = False
+    metadata_started_utc = ""
+    try:
+        with connect(settings, database) as connection:
+            connection_established = True
+            metadata_started_utc = datetime.now(timezone.utc).isoformat()
+            running_stages = [
+                {"prompt": "03", "stage": "connection", "status": "PASS", "started_utc": started_utc, "finished_utc": metadata_started_utc},
+                {"prompt": "04", "stage": "metadata", "status": "RUNNING", "started_utc": metadata_started_utc, "finished_utc": ""},
+            ]
+            _write_inventory_control_evidence(
+                run_directory, run_id, database, settings, errors,
+                status="RUNNING", completed_stages=("connection",), stage_status=running_stages,
+            )
+            if not settings.discover_security_metadata:
+                for query in SECURITY_METADATA_QUERIES:
+                    _write_csv(run_directory / query.output_folder / query.output_name, query.columns, [])
+                    support_rows.append(support_record(query, row_count=0, state="DISABLED"))
+
+            cursor = ReadOnlyCursor(connection.cursor())
+            for query in attempted_queries:
+                output_path = run_directory / query.output_folder / query.output_name
+                try:
+                    rows = _fetch(cursor, query)
+                    row_counts[query.name] = len(rows)
+                    _write_csv(output_path, query.columns, rows)
+                    if query.feature_family:
+                        support_rows.append(support_record(query, row_count=len(rows)))
+                except Exception as exc:
+                    row_counts[query.name] = 0
+                    errors.append({
+                        "stage": query.stage,
+                        "database": database,
+                        "schema_name": "",
+                        "object_name": "",
+                        "query_name": query.name,
+                        "error_type": type(exc).__name__,
+                        "sanitized_message": redact_text(exc, sensitive_values=sensitive_values),
+                        "impact": f"{query.output_name} contains headers only",
+                        "continuation": "Independent metadata queries continued",
+                    })
+                    _write_csv(output_path, query.columns, [])
+                    if query.feature_family:
+                        state = "UNSUPPORTED" if is_unsupported_metadata_error(exc) else "INACCESSIBLE"
+                        support_rows.append(support_record(query, row_count=0, state=state))
+    except Exception as exc:
+        failure_stage = "metadata" if connection_established else "connection"
+        sanitized_message = redact_text(exc, sensitive_values=sensitive_values)
+        errors.append({
+            "stage": failure_stage,
+            "database": database,
+            "schema_name": "",
+            "object_name": "",
+            "query_name": "inventory_runtime" if connection_established else "initial_connection",
+            "error_type": type(exc).__name__,
+            "sanitized_message": sanitized_message,
+            "impact": "Metadata inventory did not complete",
+            "continuation": "Run finalized with truthful failure evidence",
+        })
+        failed_utc = datetime.now(timezone.utc).isoformat()
+        failed_stages = [
+            {
+                "prompt": "03", "stage": "connection",
+                "status": "PASS" if connection_established else "FAILED",
+                "started_utc": started_utc, "finished_utc": failed_utc,
+            },
+            {
+                "prompt": "04", "stage": "metadata",
+                "status": "FAILED" if connection_established else "NOT_STARTED",
+                "started_utc": metadata_started_utc, "finished_utc": failed_utc if connection_established else "",
+            },
+        ]
+        _write_inventory_control_evidence(
+            run_directory, run_id, database, settings, errors,
+            status="PARTIAL" if connection_established else "FAILED",
+            completed_stages=("connection",) if connection_established else (),
+            stage_status=failed_stages,
+        )
+        raise RuntimeError(f"Metadata inventory failed: {sanitized_message}") from None
+
     _write_csv(run_directory / "02_Server_Database" / "MSSQL_FEATURE_SUPPORT_OVERVIEW.csv", FEATURE_SUPPORT_HEADERS, support_rows)
     (run_directory / "02_Server_Database" / "MSSQL_FEATURE_SUPPORT_OVERVIEW.md").write_text(
         feature_support_markdown(support_rows), encoding="utf-8"
     )
     _write_narratives(run_directory, database, row_counts, errors, len(attempted_queries))
-    (run_directory / "00_Run_Metadata" / "RUN_CONFIGURATION.json").write_text(
-        json.dumps(settings.sanitized(), indent=2) + "\n", encoding="utf-8"
+    finished_utc = datetime.now(timezone.utc).isoformat()
+    final_stages = [
+        {"prompt": "03", "stage": "connection", "status": "PASS", "started_utc": started_utc, "finished_utc": metadata_started_utc},
+        {"prompt": "04", "stage": "metadata", "status": "PASS", "started_utc": metadata_started_utc, "finished_utc": finished_utc},
+    ]
+    _write_inventory_control_evidence(
+        run_directory, run_id, database, settings, errors,
+        status="COMPLETED_WITH_WARNINGS" if errors else "COMPLETED",
+        completed_stages=("connection", "metadata"), stage_status=final_stages,
     )
-    _write_manifest_and_checksums(run_directory, run_id, database, settings, errors)
     return InventoryResult(database, run_directory, len(attempted_queries), len(errors), row_counts)

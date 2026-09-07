@@ -25,7 +25,12 @@ def _parser() -> argparse.ArgumentParser:
     cli = commands.add_parser("cli", help="Run a predefined discovery mode from the console")
     cli.add_argument("--mode", required=True, choices=("metadata", "metadata+logic", "safe-profile", "full-readonly"))
     cli.add_argument("--database", help="Use one explicitly configured database")
-    cli.add_argument("--action", choices=("all", "report"), default="all")
+    cli.add_argument("--action", choices=("all", "discover-and-report"), default="all")
+    regenerate = commands.add_parser(
+        "regenerate-reports",
+        help="Regenerate reports offline from one existing manifested output run",
+    )
+    regenerate.add_argument("--run", required=True, help="Manifested output run path or output: reference")
     return parser
 
 
@@ -45,6 +50,10 @@ def main(argv: list[str] | None = None) -> int:
     from mssql_database_documenter.cli import main as cli_main
     if command == "test-connection":
         return cli_main(["--env-file", str(args.env_file), "test-connection"])
+    if command == "regenerate-reports":
+        return cli_main([
+            "--env-file", str(args.env_file), "regenerate-reports", "--run", args.run,
+        ])
     forwarded = ["--env-file", str(args.env_file), "--mode", args.mode]
     if args.database:
         forwarded.extend(("--database", args.database))

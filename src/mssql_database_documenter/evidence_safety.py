@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import re
 from typing import Iterable
@@ -17,6 +18,15 @@ TEXT_EVIDENCE_SUFFIXES = frozenset({".csv", ".html", ".json", ".md", ".mmd", ".s
 FORBIDDEN_NAMES = frozenset({".env", ".env.local", "credentials.json"})
 FORBIDDEN_TRANSIENT_PARTS = frozenset({"__pycache__", ".pytest_cache", "cache", "logs", "temp", "tmp"})
 MASKED_TOKEN = re.compile(r"^\[MASKED:[0-9a-f]{16}\]$")
+VALID_GIT_PROFILE_POLICIES = frozenset({"mask_unknown_text", "aggregate_only"})
+NUMERIC_PROFILE_TYPES = frozenset({
+    "bigint", "bit", "decimal", "float", "int", "money", "numeric",
+    "real", "smallint", "smallmoney", "tinyint",
+})
+DATE_PROFILE_TYPES = frozenset({
+    "date", "datetime", "datetime2", "datetimeoffset", "smalldatetime", "time",
+})
+BINARY_PROFILE_TYPES = frozenset({"binary", "image", "rowversion", "timestamp", "varbinary"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,12 +79,35 @@ def _identity(row: dict[str, str]) -> tuple[str, str, str]:
     )
 
 
-def audit_run_evidence(run_root: Path, *, sensitive_values: Iterable[str] = ()) -> EvidenceSafetyAudit:
+def audit_run_evidence(
+    run_root: Path,
+    *,
+    sensitive_values: Iterable[str] = (),
+    require_git_export_policy: bool = False,
+) -> EvidenceSafetyAudit:
     """Inspect a run without trusting its generated checklist or manifest claims."""
     run_root = run_root.resolve()
     violations: list[str] = []
     files_scanned = 0
     needles = tuple(str(value) for value in sensitive_values if value and len(str(value)) >= 3)
+    git_policy: dict[str, object] = {}
+    git_policy_path = run_root / "99_Git_Handoff" / "GIT_EXPORT_POLICY.json"
+    if git_policy_path.is_file():
+        try:
+            loaded_policy = json.loads(git_policy_path.read_text(encoding="utf-8-sig"))
+            if isinstance(loaded_policy, dict):
+                git_policy = loaded_policy
+            else:
+                violations.append("Git export policy record is not a JSON object")
+        except (OSError, ValueError, TypeError):
+            violations.append("Git export policy record is unreadable")
+    elif require_git_export_policy:
+        violations.append("Git export profile-value policy record is required")
+    profile_policy = str(git_policy.get("profile_value_policy") or "")
+    if git_policy and profile_policy not in VALID_GIT_PROFILE_POLICIES:
+        violations.append("Git export profile-value policy is missing or invalid")
+    if git_policy and git_policy.get("source_evidence_mutated") is not False:
+        violations.append("Git export policy does not affirm source evidence mutated = false")
 
     for path in run_root.rglob("*"):
         relative = path.relative_to(run_root)
@@ -102,12 +135,25 @@ def audit_run_evidence(run_root: Path, *, sensitive_values: Iterable[str] = ()) 
         _identity(row): str(row.get("sensitivity_category") or "Unknown")
         for row in sensitivity_rows
     }
+    classification_evidence = {
+        _identity(row): str(row.get("evidence") or row.get("sensitivity_evidence") or "")
+        for row in sensitivity_rows
+    }
     sensitive = {key: category for key, category in classifications.items() if category in SENSITIVE_CATEGORIES}
     checked = 0
+    staged_profile_masks = 0
+    profile_data_types = {
+        _identity(row): str(row.get("data_type") or "").casefold()
+        for row in _read_csv(run_root / "13_Data_Profiling" / "COLUMN_PROFILE.csv")
+    }
 
     def effective_category(row: dict[str, str], values: Iterable[object] = ()) -> str:
-        catalogued = classifications.get(_identity(row), "Unknown")
+        identity = _identity(row)
+        catalogued = classifications.get(identity, "Unknown")
+        evidence = classification_evidence.get(identity, "")
         if catalogued in SENSITIVE_CATEGORIES:
+            return catalogued
+        if catalogued == "Non-sensitive" and evidence.upper().startswith("OVERRIDE:"):
             return catalogued
         stored = str(row.get("sensitivity_category") or catalogued)
         if stored in SENSITIVE_CATEGORIES:
@@ -119,25 +165,74 @@ def audit_run_evidence(run_root: Path, *, sensitive_values: Iterable[str] = ()) 
         return detected.category if detected.category in SENSITIVE_CATEGORIES else stored
 
     def check_rows(path: Path, fields: tuple[str, ...], label: str) -> None:
-        nonlocal checked
+        nonlocal checked, staged_profile_masks
         rows = _read_csv(path)
         if rows and not classifications:
             violations.append(f"{label} exists without sensitivity classification")
             return
         for row_number, row in enumerate(rows, 2):
             category = effective_category(row, (row.get(field, "") for field in fields))
-            if category not in SENSITIVE_CATEGORIES:
-                continue
+            identity = _identity(row)
+            evidence = classification_evidence.get(identity) or str(row.get("sensitivity_evidence") or "")
+            data_type = str(row.get("data_type") or profile_data_types.get(identity, "")).casefold()
             for field in fields:
                 value = row.get(field, "")
                 if value in (None, ""):
                     continue
-                checked += 1
-                if not is_safely_masked(value, category):
-                    violations.append(f"unmasked {category} value in {label} row {row_number}, field {field}")
+                if profile_policy == "aggregate_only":
+                    violations.append(f"profile value retained under aggregate_only in {label} row {row_number}, field {field}")
+                    continue
+                if category in SENSITIVE_CATEGORIES:
+                    checked += 1
+                    if not is_safely_masked(value, category):
+                        violations.append(f"unmasked {category} value in {label} row {row_number}, field {field}")
+                    elif profile_policy:
+                        staged_profile_masks += 1
+                    continue
+                if profile_policy != "mask_unknown_text":
+                    continue
+                text = str(value).strip()
+                if text == "[REDACTED]" or text == "[BINARY_REDACTED]" or MASKED_TOKEN.fullmatch(text):
+                    staged_profile_masks += 1
+                elif data_type in BINARY_PROFILE_TYPES:
+                    violations.append(f"unredacted binary profile value in {label} row {row_number}, field {field}")
+                elif category == "Non-sensitive" and evidence.upper().startswith("OVERRIDE:"):
+                    continue
+                elif data_type in NUMERIC_PROFILE_TYPES or data_type in DATE_PROFILE_TYPES:
+                    continue
+                else:
+                    violations.append(f"unmasked unknown text profile value in {label} row {row_number}, field {field}")
+
+    def verify_git_policy_record() -> None:
+        if not git_policy:
+            return
+        manifest_path = run_root / "00_Run_Metadata" / "manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError, TypeError):
+            violations.append("Git export manifest is unreadable during policy verification")
+            return
+        if manifest.get("git_export") != git_policy:
+            violations.append("Git export manifest policy does not match the independent policy record")
+        try:
+            recorded_masked = int(git_policy.get("profile_values_masked", -1))
+            recorded_omitted = int(git_policy.get("profile_values_omitted", -1))
+        except (TypeError, ValueError):
+            violations.append("Git export profile-value counters are invalid")
+            return
+        if recorded_masked < 0 or recorded_omitted < 0:
+            violations.append("Git export profile-value counters are invalid")
+        if profile_policy == "mask_unknown_text" and recorded_masked != staged_profile_masks:
+            violations.append("Git export masked profile-value count does not match staged evidence")
+        if profile_policy == "aggregate_only" and (
+            recorded_masked != 0 or git_policy.get("profile_value_fields_withheld") is not True
+            or not git_policy.get("withheld_profile_fields")
+        ):
+            violations.append("Git export aggregate-only policy marker or masked counter is inaccurate")
 
     check_rows(run_root / "13_Data_Profiling" / "COLUMN_PROFILE.csv", ("minimum_value", "maximum_value"), "COLUMN_PROFILE.csv")
     check_rows(run_root / "13_Data_Profiling" / "LOW_CARDINALITY_VALUES.csv", ("value",), "LOW_CARDINALITY_VALUES.csv")
+    verify_git_policy_record()
 
     masking_rows = _read_csv(run_root / "14_Samples" / "MASKING_REPORT.csv")
     sample_groups: dict[tuple[str, str], dict[str, str]] = {}
@@ -187,7 +282,16 @@ def audit_run_evidence(run_root: Path, *, sensitive_values: Iterable[str] = ()) 
         "transient_paths_absent": not any("transient/internal" in item or "symbolic link" in item for item in unique_violations),
         "configured_secrets_absent": not any("configured sensitive value" in item for item in unique_violations),
         "secret_assignments_redacted": not any("secret assignment" in item for item in unique_violations),
-        "profile_values_masked": not any("COLUMN_PROFILE" in item or "LOW_CARDINALITY" in item for item in unique_violations),
+        "profile_values_masked": not any(
+            "COLUMN_PROFILE" in item or "LOW_CARDINALITY" in item or "profile value" in item
+            for item in unique_violations
+        ),
+        "git_profile_policy_valid": not any("profile-value policy" in item for item in unique_violations),
+        "git_profile_policy_record_accurate": not any(
+            "manifest policy" in item or "profile-value count" in item
+            or "aggregate-only policy marker" in item or "source evidence mutated" in item
+            for item in unique_violations
+        ),
         "sample_values_masked": not any(" sample in " in item for item in unique_violations),
     }
     return EvidenceSafetyAudit(

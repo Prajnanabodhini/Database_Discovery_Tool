@@ -59,12 +59,21 @@ Never expose the dashboard to a network interface without a separate security re
 
 ## Safe console commands
 
+These commands start a new live read-only discovery and generate that run's normal reports:
+
 ```powershell
 .\.venv\Scripts\python.exe main.py test-connection
 .\.venv\Scripts\python.exe main.py cli --mode metadata
 .\.venv\Scripts\python.exe main.py cli --mode metadata+logic
 .\.venv\Scripts\python.exe main.py cli --mode safe-profile
 .\.venv\Scripts\python.exe main.py cli --mode full-readonly
+```
+
+To regenerate only the presentation for an existing manifested run, use the
+separate offline command. It does not connect to MSSQL or modify the selected run:
+
+```powershell
+.\.venv\Scripts\python.exe main.py regenerate-reports --run "output:School/run_20260907_120000"
 ```
 
 Use `--database "Configured Name"` after the mode to select one database from the configured allowlist. `run_metadata.bat` is the metadata-mode shortcut.
@@ -104,7 +113,13 @@ The legacy staged module CLI remains supported:
 .\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env test-connection
 .\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env inventory
 .\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env --mode full-readonly all
+.\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env --mode full-readonly discover-and-report
+.\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env regenerate-reports --run "output:School/run_20260907_120000"
 ```
+
+`all` and `discover-and-report` both perform a new live read-only discovery.
+`regenerate-reports` is the offline selected-run operation. The ambiguous legacy
+`report` command is intentionally not accepted.
 
 ## Sensitive-evidence safety note
 
@@ -127,6 +142,9 @@ rejects unsafe evidence.
   before and after, and never overwrites the source or an earlier regeneration.
 - Comparison results stay in memory unless **Compare and export** is selected.
 - A Git export is created only through the explicit Git-export action and is rescanned for configured sensitive values before copying.
+- Local output is canonical working evidence and can retain policy-approved profile extrema or distribution labels. It is not automatically safe to publish.
+- Git export applies the separate `GIT_EXPORT_PROFILE_VALUE_POLICY`. The secure default, `mask_unknown_text`, pseudonymizes unknown textual profile values and redacts binary values in the staged copy; `aggregate_only` withholds extrema and distribution labels while retaining counts and aggregate metrics. A `raw` profile-value policy is not supported.
+- Git-export masking is a conservative publication boundary, not proof that every local value has been semantically de-identified. Review `99_Git_Handoff/GIT_EXPORT_POLICY.json`, the independent audit result, and checksums before committing an export.
 - Existing historical `output/` and `git_export/` evidence is never treated as source scaffold or silently replaced.
 
 ## Dashboard capabilities
