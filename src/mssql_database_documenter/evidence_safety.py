@@ -9,10 +9,10 @@ import re
 from typing import Iterable
 
 from .inventory import safe_path_component
+from .profiling.sensitivity import SENSITIVE_CATEGORIES, classify_sensitivity
 from .redaction import redact_text
 
 
-SENSITIVE_CATEGORIES = frozenset({"Credential", "PII", "Financial", "Health", "Potentially Sensitive"})
 TEXT_EVIDENCE_SUFFIXES = frozenset({".csv", ".html", ".json", ".md", ".mmd", ".sha256", ".sql", ".txt"})
 FORBIDDEN_NAMES = frozenset({".env", ".env.local", "credentials.json"})
 FORBIDDEN_TRANSIENT_PARTS = frozenset({"__pycache__", ".pytest_cache", "cache", "logs", "temp", "tmp"})
@@ -105,6 +105,19 @@ def audit_run_evidence(run_root: Path, *, sensitive_values: Iterable[str] = ()) 
     sensitive = {key: category for key, category in classifications.items() if category in SENSITIVE_CATEGORIES}
     checked = 0
 
+    def effective_category(row: dict[str, str], values: Iterable[object] = ()) -> str:
+        catalogued = classifications.get(_identity(row), "Unknown")
+        if catalogued in SENSITIVE_CATEGORIES:
+            return catalogued
+        stored = str(row.get("sensitivity_category") or catalogued)
+        if stored in SENSITIVE_CATEGORIES:
+            return stored
+        detected = classify_sensitivity(
+            str(row.get("column_name") or ""), schema=str(row.get("schema_name") or ""),
+            table=str(row.get("object_name") or ""), values=values,
+        )
+        return detected.category if detected.category in SENSITIVE_CATEGORIES else stored
+
     def check_rows(path: Path, fields: tuple[str, ...], label: str) -> None:
         nonlocal checked
         rows = _read_csv(path)
@@ -112,7 +125,7 @@ def audit_run_evidence(run_root: Path, *, sensitive_values: Iterable[str] = ()) 
             violations.append(f"{label} exists without sensitivity classification")
             return
         for row_number, row in enumerate(rows, 2):
-            category = str(row.get("sensitivity_category") or classifications.get(_identity(row), "Unknown"))
+            category = effective_category(row, (row.get(field, "") for field in fields))
             if category not in SENSITIVE_CATEGORIES:
                 continue
             for field in fields:
@@ -144,6 +157,29 @@ def audit_run_evidence(run_root: Path, *, sensitive_values: Iterable[str] = ()) 
                 checked += 1
                 if not is_safely_masked(value, category):
                     violations.append(f"unmasked {category} sample in {sample_path.name} row {row_number}, column {column}")
+
+    samples_root = run_root / "14_Samples"
+    control_names = {"masking_report.csv", "sample_index.csv"}
+    for sample_path in samples_root.glob("*.csv") if samples_root.is_dir() else ():
+        if sample_path.name.casefold() in control_names:
+            continue
+        for row_number, row in enumerate(_read_csv(sample_path), 2):
+            for column, value in row.items():
+                if value in (None, ""):
+                    continue
+                category = next((
+                    stored for (schema, obj), mapping in sample_groups.items()
+                    for name, stored in mapping.items()
+                    if sample_path.name.casefold() == f"{safe_path_component(schema)}__{safe_path_component(obj)}.csv".casefold()
+                    and name.casefold() == column.casefold()
+                ), "Unknown")
+                detected = classify_sensitivity(column, values=(value,))
+                if category not in SENSITIVE_CATEGORIES and detected.category in SENSITIVE_CATEGORIES:
+                    category = detected.category
+                if category in SENSITIVE_CATEGORIES:
+                    checked += 1
+                    if not is_safely_masked(value, category):
+                        violations.append(f"unmasked {category} sample in {sample_path.name} row {row_number}, column {column}")
 
     unique_violations = tuple(dict.fromkeys(violations))
     checks = {

@@ -8,9 +8,12 @@ from mssql_database_documenter.comparison import (
     _read_rows,
     compare_rows,
     compare_run_paths,
+    export_comparison,
     load_run,
+    row_matches_status,
     write_database_comparison,
 )
+from mssql_database_documenter.web.renderers import render_file
 
 
 def write_csv(root: Path, relative: str, rows: list[dict[str, object]]) -> None:
@@ -173,6 +176,103 @@ class ComparisonTests(unittest.TestCase):
                 writer.writeheader()
                 writer.writerow({"definition_sanitized": value})
             self.assertEqual(_read_rows(path)[0]["definition_sanitized"], value)
+
+    def test_multi_event_timeline_filters_match_every_interval_event(self) -> None:
+        rows = compare_rows(
+            {
+                "A": [{"name": "readded", "value": "old"}, {"name": "reverted", "value": "old"}],
+                "B": [{"name": "added_changed", "value": "first"}, {"name": "reverted", "value": "new"}],
+                "C": [
+                    {"name": "added_changed", "value": "second"},
+                    {"name": "readded", "value": "new"},
+                    {"name": "reverted", "value": "old"},
+                ],
+            },
+            ("name",),
+            ("value",),
+        )
+        by_name = {row["identity"]["name"]: row for row in rows}
+        added_changed = by_name["added_changed"]
+        self.assertIn("ADDED_IN_B", added_changed["timeline_events"])
+        self.assertIn("CHANGED_B_TO_C", added_changed["timeline_events"])
+        self.assertTrue(row_matches_status(added_changed, "ADDED"))
+        self.assertTrue(row_matches_status(added_changed, "CHANGED_ONLY"))
+
+        readded = by_name["readded"]
+        self.assertIn("REMOVED_IN_B", readded["timeline_events"])
+        self.assertIn("ADDED_IN_C", readded["timeline_events"])
+        self.assertTrue(row_matches_status(readded, "REMOVED"))
+        self.assertTrue(row_matches_status(readded, "ADDED"))
+        reverted = by_name["reverted"]
+        self.assertIn("REVERTED_TO_A", reverted["timeline_events"])
+        self.assertTrue(row_matches_status(reverted, "CHANGED_ONLY"))
+
+    def test_global_and_category_summary_scopes_are_exact(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            first = write_run(base, "1", "School")
+            second = write_run(base, "2", "School")
+            write_csv(first, "04_Tables/TABLE_CATALOGUE.csv", [{"schema_name": "dbo", "object_name": "T", "temporal_type_desc": "NON_TEMPORAL_TABLE", "is_memory_optimized": "0", "inferred_category": "CORE"}])
+            write_csv(second, "04_Tables/TABLE_CATALOGUE.csv", [{"schema_name": "dbo", "object_name": "T", "temporal_type_desc": "NON_TEMPORAL_TABLE", "is_memory_optimized": "0", "inferred_category": "LOOKUP"}])
+            result = compare_run_paths([load_run(first), load_run(second)])
+
+            category_total = 0
+            for name, payload in result["categories"].items():
+                with self.subTest(category=name):
+                    self.assertEqual(payload["count"], payload["summary"]["row_count"])
+                    self.assertEqual(
+                        payload["summary"]["row_count"],
+                        sum(payload["summary"]["primary_status_counts"].values()),
+                    )
+                    self.assertEqual(payload["summary"]["scope"], "CATEGORY_ALL_ROWS")
+                    category_total += payload["count"]
+            self.assertEqual(result["summary"]["scope"], "GLOBAL_ALL_CATEGORY_ROWS")
+            self.assertEqual(result["summary"]["row_count"], category_total)
+            self.assertEqual(
+                result["summary"]["row_count"],
+                sum(result["summary"]["primary_status_counts"].values()),
+            )
+
+    def test_static_html_export_survives_safe_renderer_with_full_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            runs = []
+            for run_id, count, definition in (
+                ("1", 100, "SELECT 1"),
+                ("2", 120, "SELECT 2"),
+                ("3", 100, "SELECT 1"),
+            ):
+                run = write_run(base / "runs", run_id, "School")
+                write_csv(run, "09_Stored_Procedures/STORED_PROCEDURE_CATALOGUE.csv", [{"schema_name": "dbo", "object_name": "LoadStudents", "definition_sha256": str(count), "definition_sanitized": definition}])
+                metrics = run / "02_Server_Database" / "DATABASE_SUMMARY_METRICS.json"
+                metrics.parent.mkdir(parents=True, exist_ok=True)
+                metrics.write_text(json.dumps({"student_count": count}), encoding="utf-8")
+                runs.append(load_run(run))
+            result = compare_run_paths(runs)
+            result["warnings"].append("Review comparison evidence carefully.")
+            paths = export_comparison(result, base / "output")
+            source = paths["html"].read_text(encoding="utf-8")
+            exported_json = json.loads(paths["json"].read_text(encoding="utf-8"))
+            with paths["csv"].open(encoding="utf-8-sig", newline="") as handle:
+                csv_rows = list(csv.DictReader(handle))
+
+            self.assertNotIn("<script", source.casefold())
+            self.assertEqual(exported_json["schema_version"], 4)
+            self.assertTrue(any("REVERTED_TO_A" in row["timeline_events"] for row in csv_rows))
+            for expected in (
+                "Run A", "Run B", "Run C", "Review comparison evidence carefully.",
+                "Global summary", "procedures", "A→B", "B→C", "A→C",
+                "REVERTED_TO_A", "student_count", "B_MINUS_A", "-SELECT 1",
+            ):
+                self.assertIn(expected, source)
+
+            rendered = render_file(paths["html"])
+            self.assertEqual(rendered["kind"], "html")
+            self.assertTrue(rendered["trusted"])
+            self.assertIn("Run comparison export", rendered["html"])
+            self.assertIn("loadstudents", rendered["html"])
+            self.assertIn("REVERTED_TO_A", rendered["html"])
+            self.assertIn("-SELECT 1", rendered["html"])
 
 
 if __name__ == "__main__":

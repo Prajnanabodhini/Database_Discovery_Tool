@@ -46,7 +46,48 @@ CATALOGUES: dict[str, CatalogueSpec] = {
     "risks": CatalogueSpec("18_Risks_Uncertainties/RISK_AND_UNCERTAINTY_REGISTER.csv", ("category", "object_context", "observation"), ("severity", "evidence_type", "uncertainty")),
     "errors": CatalogueSpec("00_Run_Metadata/DISCOVERY_ERRORS.csv", ("prompt", "stage", "schema_name", "object_name", "query_name"), ("error_type", "impact", "continuation")),
     "sql_agent_jobs": CatalogueSpec("16_Pipelines/SQL_AGENT_JOB_CATALOGUE.csv", ("job_name", "step_id"), ("step_name", "subsystem", "database_name", "command_sha256", "schedule_name", "is_enabled")),
+    "database_files": CatalogueSpec("02_Server_Database/DATABASE_FILES.csv", ("file_id",), ("file_name", "file_type", "filegroup_name", "state_desc", "size_kb", "max_size_kb", "growth", "is_percent_growth", "is_read_only"), ("size_kb", "max_size_kb", "growth")),
+    "filegroups": CatalogueSpec("02_Server_Database/FILEGROUP_CATALOGUE.csv", ("data_space_id",), ("filegroup_name", "type_desc", "is_default", "is_read_only", "file_count", "total_size_kb"), ("file_count", "total_size_kb")),
+    "partition_functions": CatalogueSpec("07_Indexes_Constraints/PARTITION_FUNCTIONS.csv", ("function_name", "parameter_id"), ("type_desc", "boundary_value_on_right", "fanout", "type_schema_name", "data_type", "max_length", "precision", "scale"), ("fanout",)),
+    "partition_schemes": CatalogueSpec("07_Indexes_Constraints/PARTITION_SCHEMES.csv", ("scheme_name", "destination_id"), ("function_name", "destination_data_space_id", "filegroup_name")),
+    "partition_compression": CatalogueSpec("04_Tables/PARTITION_COMPRESSION.csv", ("schema_name", "object_name", "index_id", "partition_number"), ("index_name", "row_count", "data_compression", "data_space_name"), ("row_count",)),
+    "user_defined_types": CatalogueSpec("05_Columns/USER_DEFINED_TYPES.csv", ("type_schema_name", "type_name"), ("system_type_name", "max_length", "precision", "scale", "collation_name", "is_nullable", "is_table_type", "is_assembly_type"), ("max_length", "precision", "scale")),
+    "statistics": CatalogueSpec("07_Indexes_Constraints/STATISTICS_CATALOGUE.csv", ("schema_name", "object_name", "statistics_name", "stats_column_id"), ("auto_created", "user_created", "no_recompute", "has_filter", "filter_definition", "column_id", "column_name")),
+    "fulltext_catalogs": CatalogueSpec("07_Indexes_Constraints/FULLTEXT_CATALOGUES.csv", ("fulltext_catalog_id",), ("catalog_name", "is_default", "is_accent_sensitivity_on", "is_importing")),
+    "fulltext_indexes": CatalogueSpec("07_Indexes_Constraints/FULLTEXT_INDEXES.csv", ("schema_name", "object_name"), ("unique_index_name", "catalog_name", "is_enabled", "change_tracking_state", "has_crawl_completed", "crawl_type")),
+    "cdc_status": CatalogueSpec("02_Server_Database/CDC_STATUS.csv", ("scope", "schema_name", "object_name"), ("is_cdc_enabled", "is_tracked_by_cdc")),
+    "change_tracking_status": CatalogueSpec("02_Server_Database/CHANGE_TRACKING_STATUS.csv", ("scope", "schema_name", "object_name"), ("is_auto_cleanup_on", "retention_period", "retention_period_units", "is_track_columns_updated_on", "begin_version", "cleanup_version", "min_valid_version"), ("retention_period", "begin_version", "cleanup_version", "min_valid_version")),
+    "database_scoped_configurations": CatalogueSpec("02_Server_Database/DATABASE_SCOPED_CONFIGURATIONS.csv", ("configuration_id",), ("configuration_name", "configured_value", "value_for_secondary")),
+    "xml_schema_collections": CatalogueSpec("05_Columns/XML_SCHEMA_COLLECTIONS.csv", ("xml_collection_id",), ("schema_name", "collection_name", "principal_id", "modify_date")),
+    "security_principals": CatalogueSpec("02_Server_Database/SECURITY_PRINCIPALS.csv", ("principal_id",), ("principal_type", "authentication_type", "principal_name_sha256", "default_schema_name", "modify_date", "is_fixed_role")),
+    "mssql_feature_support": CatalogueSpec("02_Server_Database/MSSQL_FEATURE_SUPPORT_OVERVIEW.csv", ("query_name",), ("feature_family", "status", "row_count", "evidence"), ("row_count",)),
 }
+
+
+def summarize_rows(rows: list[dict[str, Any]], *, scope: str, category: str | None = None) -> dict[str, Any]:
+    """Return explicit, arithmetically checkable row and event totals."""
+    primary = Counter(str(row.get("status") or "UNKNOWN") for row in rows)
+    intervals = Counter(
+        str(status)
+        for row in rows
+        for status in (row.get("intervals") or {}).values()
+    )
+    events = Counter(
+        str(event)
+        for row in rows
+        for event in (row.get("timeline_events") or ())
+    )
+    result: dict[str, Any] = {
+        "scope": scope,
+        "row_count": len(rows),
+        "primary_status_counts": dict(sorted(primary.items())),
+        "interval_status_occurrences": dict(sorted(intervals.items())),
+        "timeline_event_occurrences": dict(sorted(events.items())),
+        "counting_note": "Primary status counts sum to row_count. Interval and timeline counts are event occurrences and may exceed row_count.",
+    }
+    if category is not None:
+        result["category"] = category
+    return result
 
 
 def _text_record(snapshot: RunSnapshot, path: str) -> list[dict[str, Any]]:
@@ -99,14 +140,11 @@ def compare_run_paths(runs: list[RunSnapshot | str]) -> dict[str, Any]:
     if len({snapshot.database.casefold() for snapshot in snapshots}) > 1: warnings.append("Mixed databases: matching structural names do not prove business equivalence.")
     if len({str(snapshot.summary.get('mode')) for snapshot in snapshots}) > 1: warnings.append("Discovery modes differ; unavailable evidence may not be comparable.")
     categories: dict[str, Any] = {}
-    totals = {"UNCHANGED": 0, "ADDED": 0, "REMOVED": 0, "CHANGED": 0, "OTHER": 0}
     for name, spec in CATALOGUES.items():
         rows = {label: snapshot.csv(spec.path) for label, snapshot in zip(labels, snapshots, strict=True)}
         availability = {label: snapshot.exists(spec.path) for label, snapshot in zip(labels, snapshots, strict=True)}
         compared = compare_rows(rows, spec.keys, spec.fields, spec.numeric, spec.definition, availability)
         categories[name] = {"path": spec.path, "rows": compared, "count": len(compared), "availability": availability, "status": _availability_status(availability)}
-        for row in compared:
-            key = row["status"] if row["status"] in totals else "OTHER"; totals[key] += 1
     summary_path = "02_Server_Database/DATABASE_SUMMARY_METRICS.json"
     summary_availability = {label: snapshot.exists(summary_path) for label, snapshot in zip(labels, snapshots, strict=True)}
     summary_rows = {label: _flatten_metrics(snapshot.json(summary_path) or {}) for label, snapshot in zip(labels, snapshots, strict=True)}
@@ -137,4 +175,12 @@ def compare_run_paths(runs: list[RunSnapshot | str]) -> dict[str, Any]:
                 for label, snapshot in zip(labels, snapshots, strict=True)
                 if row.get("runs", {}).get(label) is not None
             ]
-    return {"schema_version": 3, "runs": run_meta, "warnings": warnings, "semantic_note": "Structural evidence only. The comparison does not infer cause, business equivalence, or runtime behavior.", "summary": totals, "categories": categories}
+    all_rows: list[dict[str, Any]] = []
+    for name, payload in categories.items():
+        payload["summary"] = summarize_rows(payload["rows"], scope="CATEGORY_ALL_ROWS", category=name)
+        all_rows.extend(payload["rows"])
+    summary = summarize_rows(all_rows, scope="GLOBAL_ALL_CATEGORY_ROWS")
+    summary["category_count"] = len(categories)
+    summary["category_row_counts"] = {name: payload["count"] for name, payload in categories.items()}
+    summary["scope_note"] = "Every displayed/exported category row is counted once. Analytical categories may intentionally describe overlapping source evidence."
+    return {"schema_version": 4, "runs": run_meta, "warnings": warnings, "semantic_note": "Structural evidence only. The comparison does not infer cause, business equivalence, or runtime behavior.", "summary": summary, "categories": categories}

@@ -34,6 +34,22 @@ An unknown, empty, multi-statement, unparsable, or suspicious query is denied. C
 - Comparison is read-only. Files are created only for an explicit export request.
 - Git handoff is never automatic; an explicit action scans a manifested output run for forbidden files and configured sensitive values before copying.
 
+## Classification reconciliation gate
+
+Sampling can discover a stronger sensitivity signal than names, metadata, or earlier
+profile extrema did. The final catalogue classification must therefore be reconciled
+against every persisted profile and sample value. If any earlier value is not masked
+for the final category, the evidence audit fails closed. Such a run remains local
+diagnostic evidence: do not browse its raw sensitive fields unnecessarily, do not
+share it, and do not Git-export it. Repair the pipeline and create a fresh run rather
+than editing canonical evidence in place.
+
+The `0.3.1` implementation performs this reconciliation before writing the final
+sensitivity catalogue and before the independent evidence audit. This is covered by
+an offline regression that starts with an `Unknown` raw profile value and applies a
+later sample-based PII classification. Historical failed evidence is not repaired in
+place and remains ineligible for export.
+
 ## Known boundary
 
 The application guard controls only SQL issued by this application. It cannot repair an over-privileged database login, prevent another program from using those credentials, or guarantee that a large read query has negligible production impact.

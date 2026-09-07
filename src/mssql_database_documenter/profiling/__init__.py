@@ -4,6 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
+from .sensitivity import (
+    SENSITIVE_CATEGORIES,
+    SensitivityResult,
+    SensitivityRule,
+    classify_sensitivity,
+    load_sensitivity_overrides,
+    mask_value,
+)
+from .sampler import (
+    SamplePlan,
+    SanitizedSample,
+    build_sample_plan,
+    sample_failure_status,
+    sanitize_sample_rows,
+)
+
 
 def known_row_estimate(table_sizes: dict[str, dict[str, Any]], key: str) -> int | None:
     """Return a trustworthy non-negative catalog estimate, or fail closed."""
@@ -27,4 +43,10 @@ def within_safety_threshold(
     return estimate is not None and estimate <= threshold
 
 
-__all__ = ("known_row_estimate", "within_safety_threshold")
+__all__ = (
+    "SENSITIVE_CATEGORIES", "SensitivityResult", "SensitivityRule", "classify_sensitivity",
+    "SamplePlan", "SanitizedSample", "build_sample_plan", "known_row_estimate",
+    "load_sensitivity_overrides", "mask_value", "sample_failure_status",
+    "sanitize_sample_rows",
+    "within_safety_threshold",
+)

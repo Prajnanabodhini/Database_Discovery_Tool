@@ -25,6 +25,37 @@ The browser opens `http://127.0.0.1:8765/` by default. The application rejects a
 non-loopback `WEB_HOST`; do not expose it to a network interface without a separate
 security review.
 
+## Current live-revalidation gate
+
+The 2026-09-06 DB1 safe-profile validation failed its final masking audit. The code
+now reconciles the final strongest classification into earlier profile and
+low-cardinality rows and re-masks their values before finalization. Focused and full
+offline regression gates pass with release identity `0.3.1`.
+
+Live proof has not yet been repeated. Do not export the failed run, advance to DB2,
+perform the three-run live smoke, or declare v3.1 ready to freeze until a fresh DB1
+dry-run, connection, metadata, metadata+logic, and safe-profile sequence passes. The
+old failed output remains unsafe local diagnostic evidence even though Git export is
+blocked; never edit it into an apparently passing run.
+
+## Offline developer self-test
+
+Developer verification is separate from database discovery:
+
+```powershell
+.\.venv\Scripts\python.exe main.py self-test
+```
+
+The environment-independent command `python main.py self-test` is the local equivalent
+of the GitHub offline developer quality gate.
+
+This explicit command uses fixed arguments to run the offline test suite. It does not
+load `.env`, connect to MSSQL, create an `output/` run, or create `git_export/` evidence.
+Its summary is sanitized, tests marked `live` are excluded, and pytest cache creation is
+disabled. If pytest or the `tests/` tree is not installed, the command fails as a
+developer diagnostic; normal discovery remains available because runtime stage 21 never
+invokes pytest or reads test source. No Web self-test action is exposed.
+
 ## Recommended validation sequence
 
 Complete and review each step before advancing:
@@ -46,6 +77,43 @@ Use **Full Read-Only** only in an approved maintenance window after the earlier 
 have been validated. “Read-only” prevents mutation but does not eliminate CPU, I/O,
 locking, or network impact.
 
+## What each mode actually permits
+
+| Mode | Catalog/logic | Data reads | Effective depth |
+|---|---|---|---|
+| Metadata | Structural catalog only | None | Lowest-impact real run |
+| Metadata + Logic | Catalog, stored text, static dependencies, pipeline metadata | None | No discovered procedure, trigger, function, job, or definition is executed |
+| Safe Profile | Metadata + logic | Bounded samples, profiles, and relationship checks | Conservative configured thresholds; exact counts remain disabled |
+| Full Read-Only | Everything in Safe Profile | Larger bounded limits and optional exact counts | Separate configuration, extended validation, and mandatory hard ceilings |
+
+The label is not the only evidence. Open `00_Run_Metadata/RUN_CONFIGURATION.json`,
+`run_summary.json`, or `manifest.json` and inspect `resolved_mode_policy` to see the
+effective branches and limits used for that run.
+
+The metadata stage also writes `02_Server_Database/MSSQL_FEATURE_SUPPORT_OVERVIEW.csv`
+and `.md`. Review every row: `ABSENT` means the corresponding catalogue query
+succeeded with zero matching rows visible to the reader (metadata visibility can
+still limit scope); `INACCESSIBLE` means permissions prevented a
+conclusion; `UNSUPPORTED` means the SQL Server version or edition lacks the catalog
+surface. These states must not be treated as interchangeable.
+
+Optional database-principal metadata is disabled by default. Enable it only through
+`DISCOVER_SECURITY_METADATA=true` after approval. The output contains hashed identity
+fingerprints and structural attributes, not raw principal names or grants. Keep it
+disabled when the additional security inventory is unnecessary.
+
+Full Read-Only configuration uses `FULL_READONLY_SAMPLE_ROW_LIMIT`,
+`FULL_READONLY_PROFILE_THRESHOLD`, `FULL_READONLY_EXACT_COUNT_THRESHOLD`,
+`FULL_READONLY_RELATIONSHIP_THRESHOLD`, `FULL_READONLY_LOW_CARDINALITY_LIMIT`, and
+`FULL_READONLY_EXTENDED_VALIDATION`. Exact counts also require
+`PROFILE_EXACT_ROW_COUNTS=true`; they are never enabled in the other three modes.
+
+Non-overridable ceilings are 500 safe sample rows, 2,000 Full Read-Only sample rows,
+1,000,000 safe-profile rows, 10,000,000 Full Read-Only profile/relationship rows,
+1,000,000 rows for an exact count, 100 safe low-cardinality values, and 1,000 Full
+Read-Only low-cardinality values. A policy exceeding a ceiling is rejected before a
+run directory is created.
+
 ## Multiple databases and comparison
 
 Only after the one-database sequence succeeds, clear `MSSQL_DATABASE` and set the
@@ -54,7 +122,34 @@ strictly one at a time and stops if the current database fails.
 
 On **Compare runs**, select Run A and Run B, plus optional Run C. Review mixed-mode,
 cross-database, missing-evidence, and partial-run warnings. Browser comparison remains
-in memory; HTML/CSV/JSON files are written only by **Compare and export**.
+in memory; HTML/CSV/JSON files are written only by **Compare and export**. Added,
+Changed, and Removed filters inspect all interval statuses and timeline events, not just
+one headline status. An item can therefore appear in multiple applicable filters; this
+is expected for added-then-changed, reverted, and remove/re-add histories.
+
+Global comparison totals count all rows across all displayed/exported categories.
+Selected-category totals count all rows matching the current filters, not only the
+current page. Primary-status counts always sum to the stated row count. Interval and
+timeline-event counts are occurrences and may be higher because one row can carry
+multiple events. JSON and CSV are canonical machine outputs; static HTML is the complete
+human-readable presentation and requires no JavaScript when opened in the safe browser.
+
+## Offline report regeneration
+
+Use **Regenerate Reports** only after an output run already exists:
+
+1. On the dashboard, select one manifested canonical run in the Offline presentation
+   refresh panel.
+2. Select **Regenerate Reports** and wait for the controlled job to complete.
+3. Open the returned versioned folder below `output/report_regenerations/`.
+4. Review its Markdown/HTML report, regeneration manifest, and checksums.
+
+This action does not load connection settings into a database session, open MSSQL,
+execute SQL, refresh catalogues, or modify the selected run. It hashes every source
+file before and after generation and creates a new destination for every request.
+If the stored evidence is stale or incomplete, perform a new approved discovery
+instead. A regenerated report is a presentation copy, not a sanitized Git export;
+the separate Git-export safety review still applies to canonical runs.
 
 ## Stop and recovery
 

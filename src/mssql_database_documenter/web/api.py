@@ -13,8 +13,10 @@ from ..config import VALID_MODES
 from ..connection import connect
 from ..fullrun import run_all
 from ..git_export import create_git_export
+from ..mode_policy import resolve_mode_policy
 from ..programmable_queries import PROGRAMMABLE_QUERIES, SQL_AGENT_QUERY
-from ..queries import METADATA_QUERIES, QUERIES, get_query
+from ..queries import METADATA_QUERIES, QUERIES, SECURITY_METADATA_QUERIES, get_query
+from ..report_regeneration import regenerate_reports
 from ..safety import ReadOnlyCursor, validate_read_only_sql
 from .job_manager import JobConflictError
 from .security import ALLOWED_ACTIONS
@@ -32,14 +34,16 @@ def _selected_settings(database: str, mode: str):
     settings = _settings()
     if database and database not in settings.databases: raise ValueError("Database is not in the configured allowlist")
     if mode not in VALID_MODES: raise ValueError("Invalid discovery mode")
-    return replace(settings, databases=(database,) if database else settings.databases, discovery_mode=mode)
+    selected = replace(settings, databases=(database,) if database else settings.databases, discovery_mode=mode)
+    resolve_mode_policy(selected)
+    return selected
 
 
 def _target(action: str, settings):
     def execute(job, update):
         if action == "dry-run":
             validated = []
-            for query in QUERIES + METADATA_QUERIES + PROGRAMMABLE_QUERIES + (SQL_AGENT_QUERY,):
+            for query in QUERIES + METADATA_QUERIES + SECURITY_METADATA_QUERIES + PROGRAMMABLE_QUERIES + (SQL_AGENT_QUERY,):
                 validate_read_only_sql(query.sql)
                 validated.append(query.name)
             return {"connection_attempted": False, "validated_query_count": len(validated), "warning_count": 0}
@@ -51,6 +55,8 @@ def _target(action: str, settings):
                     query = get_query("connection_identity"); cursor.execute(query.sql); row = cursor.fetchone()
                     results.append({"database": db, "connected": bool(row)})
             return {"databases": results, "warning_count": 0}
+        if action not in {"metadata", "metadata+logic", "safe-profile", "full-readonly"}:
+            raise ValueError("Action is not a discovery action")
         roots = run_all(settings, progress_callback=update, cancel_requested=job.cancel_event.is_set)
         warning_count = 0
         for root in roots:
@@ -74,8 +80,40 @@ def config():
 @api_blueprint.post("/jobs/<action>")
 def start_named_job(action: str):
     if action not in ALLOWED_ACTIONS: return jsonify({"error": "Action is not predefined"}), 400
-    payload = request.get_json(silent=True) or {}; database = str(payload.get("database") or "")
-    action_modes = {"metadata": "metadata", "metadata+logic": "metadata+logic", "safe-profile": "safe-profile", "full-readonly": "full-readonly", "reports": str(payload.get("mode") or _settings().discovery_mode), "dry-run": "metadata", "test-connection": "metadata"}
+    payload = request.get_json(silent=True) or {}
+    if action == "regenerate-reports":
+        reference = str(payload.get("run_ref") or "")
+        if not reference:
+            return jsonify({"error": "Select one manifested output run"}), 400
+        try:
+            snapshot = _browser().load_ref(reference)
+            if snapshot.origin != "output":
+                raise ValueError("Only a manifested output run can be regenerated")
+            settings = _settings()
+
+            def target(job, update):
+                update({"database": snapshot.database, "prompt": "11", "stage": "offline report regeneration", "status": "RUNNING"})
+                if job.cancel_event.is_set():
+                    return {"warning_count": 0}
+                result = regenerate_reports(
+                    snapshot,
+                    settings.output_root,
+                    sensitive_values=(settings.server, settings.username, settings.password),
+                )
+                return {**{key: str(value) for key, value in result.items()}, "warning_count": 0}
+
+            job = _jobs().start(
+                action,
+                snapshot.database,
+                str(snapshot.summary.get("mode") or "UNKNOWN"),
+                target,
+            )
+        except (ValueError, FileNotFoundError, JobConflictError) as exc:
+            return jsonify({"error": str(exc)}), 409 if isinstance(exc, JobConflictError) else 400
+        return jsonify(job.public()), 202
+
+    database = str(payload.get("database") or "")
+    action_modes = {"metadata": "metadata", "metadata+logic": "metadata+logic", "safe-profile": "safe-profile", "full-readonly": "full-readonly", "dry-run": "metadata", "test-connection": "metadata"}
     mode = action_modes[action]
     try:
         selected = _selected_settings(database, mode)
@@ -134,7 +172,13 @@ def git_export():
         if snapshot.origin != "output": raise ValueError("Only an output run can be exported")
         settings = _settings()
         def target(job, update):
-            destination = create_git_export(snapshot.root, output_root=settings.output_root, git_export_root=settings.git_export_root, sensitive_values=(settings.server, settings.username, settings.password))
+            destination = create_git_export(
+                snapshot.root,
+                output_root=settings.output_root,
+                git_export_root=settings.git_export_root,
+                sensitive_values=(settings.server, settings.username, settings.password),
+                sample_policy=settings.git_export_sample_policy,
+            )
             return {"git_export": str(destination), "warning_count": 0}
         job = _jobs().start("git-export", snapshot.database, str(snapshot.summary.get("mode") or "UNKNOWN"), target)
         return jsonify(job.public()), 202

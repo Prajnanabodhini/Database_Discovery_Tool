@@ -9,6 +9,9 @@
   const exportButton = document.getElementById("create-git-export");
   const exportSelect = document.getElementById("git-run-select");
   const exportMessage = document.getElementById("git-export-message");
+  const regenerateButton = document.getElementById("regenerate-reports");
+  const regenerateSelect = document.getElementById("report-run-select");
+  const regenerateMessage = document.getElementById("report-regeneration-message");
   const finalStatuses = ["COMPLETED", "COMPLETED_WITH_WARNINGS", "FAILED", "CANCELLED"];
   let timer;
 
@@ -81,6 +84,27 @@
       exportMessage.textContent = response.ok
         ? "Git export queued as controlled job " + value.id + "."
         : value.error || "Git export rejected.";
+      if (response.ok) {
+        present(value);
+        poll();
+      }
+    });
+  }
+  if (regenerateButton) {
+    regenerateButton.addEventListener("click", async () => {
+      if (!regenerateSelect.value) {
+        regenerateMessage.textContent = "Select a manifested output run first.";
+        return;
+      }
+      const response = await fetch("/api/jobs/regenerate-reports", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRF-Token": token},
+        body: JSON.stringify({run_ref: regenerateSelect.value})
+      });
+      const value = await response.json();
+      regenerateMessage.textContent = response.ok
+        ? "Offline report regeneration queued as controlled job " + value.id + "."
+        : value.error || "Report regeneration rejected.";
       if (response.ok) {
         present(value);
         poll();

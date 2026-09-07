@@ -1,10 +1,14 @@
+import json
 from pathlib import Path
 import tempfile
 import unittest
 
 from mssql_database_documenter.config import Settings
 from mssql_database_documenter.fullrun import SequentialRun
-from mssql_database_documenter.inventory import OUTPUT_FOLDERS, _new_run_directory, safe_path_component
+from mssql_database_documenter.inventory import (
+    OUTPUT_FOLDERS, _new_run_directory, _write_manifest_and_checksums,
+    safe_path_component,
+)
 from mssql_database_documenter.queries import METADATA_QUERIES
 from mssql_database_documenter.safety import validate_read_only_sql
 
@@ -40,6 +44,19 @@ class InventoryTests(unittest.TestCase):
             run.prompt02_safety()
             created = {item.name for item in run.root.iterdir() if item.is_dir()}
             self.assertEqual(created, {"00_Run_Metadata"})
+
+    def test_inventory_manifest_truthfully_resolves_metadata_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_id, run_directory = _new_run_directory(Path(temp_dir), "School")
+            _write_manifest_and_checksums(
+                run_directory, run_id, "School",
+                Settings(discovery_mode="full-readonly"), [],
+            )
+            manifest = json.loads((run_directory / "00_Run_Metadata" / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["configuration"]["requested_discovery_mode"], "full-readonly")
+            self.assertEqual(manifest["configuration"]["discovery_mode"], "metadata")
+            self.assertEqual(manifest["resolved_mode_policy"]["mode"], "metadata")
+            self.assertFalse(manifest["resolved_mode_policy"]["permits_data_scans"])
 
 
 if __name__ == "__main__":

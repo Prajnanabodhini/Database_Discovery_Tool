@@ -12,9 +12,12 @@ import platform
 import re
 from typing import Iterable
 
+from . import __version__
 from .config import Settings
+from .metadata.support import FEATURE_SUPPORT_HEADERS, feature_support_markdown, is_unsupported_metadata_error, support_record
+from .mode_policy import resolve_mode_policy
 from .connection import connect
-from .queries import METADATA_QUERIES, QuerySpec
+from .queries import METADATA_QUERIES, SECURITY_METADATA_QUERIES, QuerySpec
 from .redaction import redact_text
 from .safety import ReadOnlyCursor, validate_read_only_sql
 
@@ -82,6 +85,7 @@ def _write_narratives(
     database: str,
     row_counts: dict[str, int],
     errors: list[dict[str, object]],
+    attempted_query_count: int,
 ) -> None:
     (run_directory / "02_Server_Database").mkdir(parents=True, exist_ok=True)
     (run_directory / "00_Run_Metadata").mkdir(parents=True, exist_ok=True)
@@ -89,8 +93,8 @@ def _write_narratives(
         "database": database,
         "stage": "metadata",
         "catalogue_row_counts": row_counts,
-        "query_count": len(METADATA_QUERIES),
-        "successful_query_count": len(METADATA_QUERIES) - len(errors),
+        "query_count": attempted_query_count,
+        "successful_query_count": attempted_query_count - len(errors),
         "error_count": len(errors),
     }
     (run_directory / "02_Server_Database" / "DATABASE_SUMMARY_METRICS.json").write_text(
@@ -107,8 +111,8 @@ def _write_narratives(
     )
     coverage_lines = [
         "# Discovery Coverage", "", "## Completed", "",
-        f"- Metadata queries attempted: {len(METADATA_QUERIES)}",
-        f"- Metadata queries successful: {len(METADATA_QUERIES) - len(errors)}",
+        f"- Metadata queries attempted: {attempted_query_count}",
+        f"- Metadata queries successful: {attempted_query_count - len(errors)}",
         f"- Metadata queries with errors: {len(errors)}", "", "## Not yet run", "",
         "- Static programmable-object analysis", "- Data profiling and samples",
         "- Inferred relationships, cardinality, and orphan validation", "- Lineage and pipeline analysis",
@@ -127,6 +131,13 @@ def _write_manifest_and_checksums(
     settings: Settings,
     errors: list[dict[str, object]],
 ) -> None:
+    policy = resolve_mode_policy(settings, "metadata")
+    configuration = {
+        **settings.sanitized(),
+        "requested_discovery_mode": settings.discovery_mode,
+        "discovery_mode": "metadata",
+        "resolved_mode_policy": policy.as_dict(),
+    }
     (run_directory / "00_Run_Metadata").mkdir(parents=True, exist_ok=True)
     manifest_path = run_directory / "00_Run_Metadata" / "manifest.json"
     checksum_path = run_directory / "00_Run_Metadata" / "checksums.sha256"
@@ -134,11 +145,12 @@ def _write_manifest_and_checksums(
     summary_path.write_text(json.dumps({
         "run_id": run_id, "database": database, "server_alias": settings.sanitized()["server"],
         "timestamp_utc": datetime.now(timezone.utc).isoformat(), "mode": "metadata",
-        "status": "COMPLETED_WITH_WARNINGS" if errors else "COMPLETED", "tool_version": "0.3.0",
+        "status": "COMPLETED_WITH_WARNINGS" if errors else "COMPLETED", "tool_version": __version__,
         "sql_server_version": "UNKNOWN",
-        "sample_rows": settings.profile_sample_rows, "exact_row_counts": settings.profile_exact_row_counts,
+        "sample_rows": policy.sample_row_limit, "exact_row_counts": policy.exact_counts,
         "mask_sensitive_data": settings.profile_mask_sensitive_data,
-        "profile_settings": {"sample_rows": settings.profile_sample_rows, "include_sample_data": settings.profile_include_sample_data, "mask_sensitive_data": settings.profile_mask_sensitive_data, "exact_row_counts": settings.profile_exact_row_counts, "exact_row_count_threshold": settings.profile_exact_row_count_threshold, "large_table_threshold": settings.profile_large_table_threshold},
+        "profile_settings": {"sample_rows": policy.sample_row_limit, "include_sample_data": policy.samples, "sample_tables": policy.sample_tables, "sample_views": policy.sample_views, "sample_large_tables": policy.sample_large_tables, "mask_sensitive_data": settings.profile_mask_sensitive_data, "exact_row_counts": policy.exact_counts, "exact_row_count_threshold": policy.exact_count_ceiling, "large_table_threshold": policy.profile_row_threshold},
+        "resolved_mode_policy": policy.as_dict(),
         "completed_stage_count": 2,
         "completion_coverage": "2/2",
         "error_count": 0, "warning_count": len(errors),
@@ -158,9 +170,10 @@ def _write_manifest_and_checksums(
         "run_id": run_id,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "tool": "mssql-database-documenter",
-        "tool_version": "0.3.0",
+        "tool_version": __version__,
         "python_version": platform.python_version(),
-        "configuration": settings.sanitized(),
+        "configuration": configuration,
+        "resolved_mode_policy": policy.as_dict(),
         "database": database,
         "completed_stages": ["connection", "metadata"],
         "warnings": [str(item["sanitized_message"]) for item in errors],
@@ -179,16 +192,26 @@ def run_inventory(settings: Settings, database: str) -> InventoryResult:
     run_id, run_directory = _new_run_directory(settings.output_root, database)
     row_counts: dict[str, int] = {}
     errors: list[dict[str, object]] = []
+    support_rows: list[dict[str, object]] = []
     sensitive_values = (settings.password, settings.username, settings.server)
+    attempted_queries = list(METADATA_QUERIES)
+    if settings.discover_security_metadata:
+        attempted_queries.extend(SECURITY_METADATA_QUERIES)
+    else:
+        for query in SECURITY_METADATA_QUERIES:
+            _write_csv(run_directory / query.output_folder / query.output_name, query.columns, [])
+            support_rows.append(support_record(query, row_count=0, state="DISABLED"))
 
     with connect(settings, database) as connection:
         cursor = ReadOnlyCursor(connection.cursor())
-        for query in METADATA_QUERIES:
+        for query in attempted_queries:
             output_path = run_directory / query.output_folder / query.output_name
             try:
                 rows = _fetch(cursor, query)
                 row_counts[query.name] = len(rows)
                 _write_csv(output_path, query.columns, rows)
+                if query.feature_family:
+                    support_rows.append(support_record(query, row_count=len(rows)))
             except Exception as exc:
                 row_counts[query.name] = 0
                 errors.append({
@@ -203,15 +226,22 @@ def run_inventory(settings: Settings, database: str) -> InventoryResult:
                     "continuation": "Independent metadata queries continued",
                 })
                 _write_csv(output_path, query.columns, [])
+                if query.feature_family:
+                    state = "UNSUPPORTED" if is_unsupported_metadata_error(exc) else "INACCESSIBLE"
+                    support_rows.append(support_record(query, row_count=0, state=state))
 
     error_columns = (
         "stage", "database", "schema_name", "object_name", "query_name", "error_type",
         "sanitized_message", "impact", "continuation",
     )
     _write_csv(run_directory / "00_Run_Metadata" / "DISCOVERY_ERRORS.csv", error_columns, errors)
-    _write_narratives(run_directory, database, row_counts, errors)
+    _write_csv(run_directory / "02_Server_Database" / "MSSQL_FEATURE_SUPPORT_OVERVIEW.csv", FEATURE_SUPPORT_HEADERS, support_rows)
+    (run_directory / "02_Server_Database" / "MSSQL_FEATURE_SUPPORT_OVERVIEW.md").write_text(
+        feature_support_markdown(support_rows), encoding="utf-8"
+    )
+    _write_narratives(run_directory, database, row_counts, errors, len(attempted_queries))
     (run_directory / "00_Run_Metadata" / "RUN_CONFIGURATION.json").write_text(
         json.dumps(settings.sanitized(), indent=2) + "\n", encoding="utf-8"
     )
     _write_manifest_and_checksums(run_directory, run_id, database, settings, errors)
-    return InventoryResult(database, run_directory, len(METADATA_QUERIES), len(errors), row_counts)
+    return InventoryResult(database, run_directory, len(attempted_queries), len(errors), row_counts)

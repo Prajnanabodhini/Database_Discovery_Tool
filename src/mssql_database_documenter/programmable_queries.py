@@ -130,7 +130,7 @@ SQL_AGENT_QUERY = QuerySpec(
     "sql_agent_jobs", "programmable", """
     SELECT CAST('[SANITIZED]' AS nvarchar(256)) AS server_name,
            j.name AS job_name, j.enabled AS job_enabled, j.description,
-           js.step_id, js.step_name, js.subsystem,
+           js.step_id, js.step_name, js.subsystem, js.command AS command_text_internal,
            CONVERT(varchar(64), HASHBYTES('SHA2_256', CONVERT(varbinary(max), js.command)), 2) AS command_sha256,
            js.database_name, js.on_success_action, js.on_fail_action,
            sch.name AS schedule_name, sch.enabled AS schedule_enabled,

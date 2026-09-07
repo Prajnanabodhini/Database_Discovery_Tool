@@ -10,7 +10,7 @@ from flask import abort, current_app, request, session
 from ..config import LOOPBACK_HOSTS
 
 
-ALLOWED_ACTIONS = frozenset({"dry-run", "test-connection", "metadata", "metadata+logic", "safe-profile", "full-readonly", "reports"})
+ALLOWED_ACTIONS = frozenset({"dry-run", "test-connection", "metadata", "metadata+logic", "safe-profile", "full-readonly", "regenerate-reports"})
 
 
 def csrf_token() -> str:

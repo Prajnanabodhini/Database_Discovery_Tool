@@ -14,6 +14,23 @@
   let categoryMetadata = {};
   let currentPage = 1;
 
+  function presentSummary(element, summary) {
+    element.textContent = "";
+    const values = [
+      ["Scope", String(summary.scope || "UNKNOWN").replaceAll("_", " ")],
+      ["Rows", summary.row_count || 0]
+    ];
+    if (summary.category_count !== undefined) values.push(["Categories", summary.category_count]);
+    for (const [statusName, count] of Object.entries(summary.primary_status_counts || {})) {
+      values.push([statusName, count]);
+    }
+    for (const [label, value] of values) {
+      const span = document.createElement("span");
+      span.textContent = label + ": " + value;
+      element.appendChild(span);
+    }
+  }
+
   const selectedRefs = () => ["a", "b", "c"].map(key => document.getElementById("run-" + key).value).filter(Boolean);
 
   function showMetadata(select) {
@@ -83,6 +100,7 @@
     for (const row of value.rows || []) {
       const tr = document.createElement("tr");
       const values = [
+        JSON.stringify(row.timeline_events || []),
         JSON.stringify(row.runs.A ?? null), JSON.stringify(row.runs.B ?? null), JSON.stringify(row.runs.C ?? null),
         row.intervals.A_TO_B || "", row.intervals.B_TO_C || "", row.intervals.A_TO_C || "",
         JSON.stringify(row.numeric_deltas || {})
@@ -128,7 +146,7 @@
     if (!(value.rows || []).length) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
-      td.colSpan = 9;
+      td.colSpan = 10;
       td.className = "empty";
       td.textContent = "No comparison rows match the current filters.";
       tr.appendChild(td);
@@ -141,6 +159,7 @@
     document.getElementById("compare-page").textContent = "Page " + value.page + " of " + pageCount;
     document.getElementById("compare-previous").disabled = value.page <= 1;
     document.getElementById("compare-next").disabled = value.page >= pageCount;
+    presentSummary(document.getElementById("compare-category-summary"), value.summary || {});
     refreshSourceLinks();
   }
 
@@ -175,13 +194,7 @@
     }
     document.getElementById("compare-warnings").textContent = (value.warnings || []).join(" ");
     document.getElementById("compare-semantic-note").textContent = value.semantic_note || "";
-    const summary = document.getElementById("compare-summary");
-    summary.textContent = "";
-    for (const [key, count] of Object.entries(value.summary)) {
-      const span = document.createElement("span");
-      span.textContent = key + ": " + count;
-      summary.appendChild(span);
-    }
+    presentSummary(document.getElementById("compare-global-summary"), value.summary || {});
     database.textContent = "";
     const allDatabases = document.createElement("option");
     allDatabases.value = "";

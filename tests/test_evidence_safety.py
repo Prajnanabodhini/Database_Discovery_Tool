@@ -56,6 +56,17 @@ class EvidenceSafetyTests(unittest.TestCase):
             self.assertTrue(audit.passed, audit.violations)
             self.assertEqual(audit.sensitive_values_checked, 3)
 
+    def test_final_catalogue_classification_catches_earlier_unknown_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = write_profile_run(Path(directory), "Alice Example")
+            profile = run / "13_Data_Profiling" / "COLUMN_PROFILE.csv"
+            rows = list(csv.DictReader(profile.open("r", encoding="utf-8-sig", newline="")))
+            rows[0]["sensitivity_category"] = "Unknown"
+            write_csv(profile, tuple(rows[0]), rows)
+            audit = audit_run_evidence(run)
+            self.assertFalse(audit.passed)
+            self.assertFalse(audit.checks["profile_values_masked"])
+
     def test_unsafe_git_export_is_rejected_without_partial_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

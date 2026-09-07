@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mssql-database-documenter"
-version = "0.3.0"
+version = "0.3.1"
 description = "Strictly read-only MSSQL discovery and documentation engine with a local Web UI"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -32,3 +32,6 @@ mssql_database_documenter = ["web/templates/*.html", "web/static/css/*.css", "we
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+  "live: explicitly authorized tests that may access a live MSSQL service; excluded by main.py self-test",
+]

@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -64,6 +65,9 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertIn("Run A and Run B, plus optional Run C", guide)
         self.assertIn("do not expose it to a network interface", guide)
+        self.assertIn("What each mode actually permits", guide)
+        self.assertIn("resolved_mode_policy", guide)
+        self.assertIn("Exact counts", guide)
 
     def test_html_feature_checklist_is_fully_approved(self) -> None:
         checklist = (Path(launcher.__file__).resolve().parent / "HTML_FEATURE_CHECKLIST.md").read_text(encoding="utf-8")
@@ -116,8 +120,9 @@ class WebAppTests(unittest.TestCase):
             self.assertFalse((base / "git_export").exists())
             response = app.test_client().get("/")
             self.assertEqual(response.status_code, 200)
-            for label in (b"Dry Run", b"Test Connection", b"Metadata + Logic", b"Safe Profile", b"Full Read-Only", b"Generate Reports", b"Create Git export", b"Job ID", b"Elapsed"):
+            for label in (b"Dry Run", b"Test Connection", b"Metadata + Logic", b"Safe Profile", b"Full Read-Only", b"Regenerate Reports", b"Create Git export", b"Job ID", b"Elapsed"):
                 self.assertIn(label, response.data)
+            self.assertNotIn(b"Generate Reports", response.data)
             self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
             self.assertEqual(response.headers["Cross-Origin-Opener-Policy"], "same-origin")
@@ -152,6 +157,8 @@ class WebAppTests(unittest.TestCase):
             help_page = client.get("/help")
             for label in (b"What this project does", b"Why the steps are gradual", b"Output evidence", b"Safety model", b"Troubleshooting", b"Evidence labels"):
                 self.assertIn(label, help_page.data)
+            self.assertIn(b"How can I verify what a mode really did?", help_page.data)
+            self.assertIn(b"Metadata modes prohibit table/view data scans", help_page.data)
             dashboard = client.get("/")
             for label in (b"Use these steps in order", b"What do these settings mean?", b"Action explanations", b"When is a run ready to export?", b"Open the full help guide"):
                 self.assertIn(label, dashboard.data)
@@ -261,26 +268,66 @@ class WebAppTests(unittest.TestCase):
             dashboard = client.get("/")
             self.assertIn(b"<strong>2</strong><span>recent indexed runs</span>", dashboard.data)
 
-    def test_three_run_comparison_filters_raw_metadata_and_explicit_exports(self) -> None:
+    def test_report_regeneration_is_run_selected_offline_and_source_preserving(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
-            for run_id in ("1", "2", "3"):
-                write_run(base / "output", run_id)
+            source = write_run(base / "output", "1")
+            before = {path.relative_to(source).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in source.rglob("*") if path.is_file()}
             app = self.make_app(base)
             client = app.test_client()
             token = self.csrf(client)
             headers = {"X-CSRF-Token": token}
-            refs = [item["ref"] for item in client.get("/api/runs").get_json()["runs"]]
+            reference = client.get("/api/runs").get_json()["runs"][0]["ref"]
+            self.assertEqual(client.post("/api/jobs/reports", json={}, headers=headers).status_code, 400)
+            with patch("mssql_database_documenter.web.api.connect", side_effect=AssertionError("database connection attempted")) as connect:
+                response = client.post("/api/jobs/regenerate-reports", json={"run_ref": reference}, headers=headers)
+                self.assertEqual(response.status_code, 202)
+                job = app.extensions["documenter_jobs"].wait(response.get_json()["id"])
+            connect.assert_not_called()
+            self.assertEqual(job.status, "COMPLETED")
+            self.assertEqual({path.relative_to(source).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in source.rglob("*") if path.is_file()}, before)
+            destination = Path(job.result["destination"])
+            self.assertNotIn(source, destination.parents)
+            relative = Path(job.result["html"]).relative_to(base / "output").as_posix()
+            page = client.get("/file", query_string={"root": "output", "path": relative})
+            self.assertEqual(page.status_code, 200)
+            self.assertIn(b"Regenerated report", page.data)
+
+    def test_three_run_comparison_filters_raw_metadata_and_explicit_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            created = {}
+            for run_id in ("1", "2", "3"):
+                created[run_id] = write_run(base / "output", run_id)
+            for run_id, category in (("2", "CORE"), ("3", "LOOKUP")):
+                with (created[run_id] / "04_Tables" / "TABLE_CATALOGUE.csv").open("a", encoding="utf-8-sig", newline="") as handle:
+                    writer = csv.DictWriter(handle, fieldnames=("schema_name", "object_name", "temporal_type_desc", "is_memory_optimized", "inferred_category"))
+                    writer.writerow({"schema_name": "dbo", "object_name": "Timeline", "temporal_type_desc": "NON_TEMPORAL_TABLE", "is_memory_optimized": "0", "inferred_category": category})
+            app = self.make_app(base)
+            client = app.test_client()
+            token = self.csrf(client)
+            headers = {"X-CSRF-Token": token}
+            registered = client.get("/api/runs").get_json()["runs"]
+            refs = [item["ref"] for item in sorted(registered, key=lambda item: item["run_id"])]
             response = client.post("/api/compare", json={"runs": refs, "export": False}, headers=headers)
             self.assertEqual(response.status_code, 200)
             payload = response.get_json()
             self.assertIn("category_metadata", payload)
             self.assertIn("does not infer cause", payload["semantic_note"])
             comparison_id = payload["id"]
+            self.assertEqual(payload["summary"]["scope"], "GLOBAL_ALL_CATEGORY_ROWS")
+            self.assertEqual(payload["summary"]["row_count"], sum(payload["categories"].values()))
+            self.assertEqual(payload["summary"]["row_count"], sum(payload["summary"]["primary_status_counts"].values()))
             dbo = client.get(f"/api/compare/{comparison_id}?category=tables&schema=dbo").get_json()
-            self.assertEqual(dbo["total"], 3)
+            self.assertEqual(dbo["total"], 4)
             self.assertEqual(client.get(f"/api/compare/{comparison_id}?category=tables&schema=missing").get_json()["total"], 0)
-            self.assertGreaterEqual(client.get(f"/api/compare/{comparison_id}?category=tables&status=ADDED").get_json()["total"], 1)
+            added = client.get(f"/api/compare/{comparison_id}?category=tables&status=ADDED").get_json()
+            changed = client.get(f"/api/compare/{comparison_id}?category=tables&status=CHANGED_ONLY").get_json()
+            for filtered in (added, changed):
+                self.assertIn("timeline", {row["identity"].get("object_name") for row in filtered["rows"]})
+                self.assertEqual(filtered["summary"]["scope"], "CATEGORY_FILTERED_ROWS")
+                self.assertEqual(filtered["summary"]["row_count"], filtered["total"])
+                self.assertEqual(filtered["total"], sum(filtered["summary"]["primary_status_counts"].values()))
             self.assertEqual(client.get(f"/api/compare/{comparison_id}?category=tables&database=Other").get_json()["total"], 0)
             exported = client.post("/api/compare", json={"runs": refs, "export": True}, headers=headers).get_json()["exports"]
             self.assertEqual(set(exported), {"html", "csv", "json"})

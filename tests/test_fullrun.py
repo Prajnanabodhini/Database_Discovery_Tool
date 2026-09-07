@@ -8,7 +8,8 @@ from mssql_database_documenter.contracts import DISCOVERY_CAPABILITY_MATRIX, EVI
 from mssql_database_documenter.config import Settings
 from mssql_database_documenter.fullrun import DiscoveryCancelled, SequentialRun, _classification, _definition_references, _is_access_limitation, _known_row_estimate, _mask, _qid, _static_column_references, _type_family, _within_safety_threshold, run_all
 from mssql_database_documenter.programmable_queries import PROGRAMMABLE_QUERIES, SQL_AGENT_QUERY
-from mssql_database_documenter.queries import METADATA_QUERIES, QUERIES
+from mssql_database_documenter.profiling.sensitivity import classify_sensitivity
+from mssql_database_documenter.queries import METADATA_QUERIES, QUERIES, SECURITY_METADATA_QUERIES
 from mssql_database_documenter.safety import validate_read_only_sql
 
 
@@ -19,12 +20,12 @@ class FullRunTests(unittest.TestCase):
                 __import__(f"mssql_database_documenter.{package}")
 
     def test_every_static_query_passes_fail_closed_gate(self) -> None:
-        for query in QUERIES + METADATA_QUERIES + PROGRAMMABLE_QUERIES + (SQL_AGENT_QUERY,):
+        for query in QUERIES + METADATA_QUERIES + SECURITY_METADATA_QUERIES + PROGRAMMABLE_QUERIES + (SQL_AGENT_QUERY,):
             with self.subTest(query=query.name):
                 validate_read_only_sql(query.sql)
 
     def test_comprehensive_discovery_capability_matrix_is_backed_by_artifacts(self) -> None:
-        expected = {"server_database_metadata", "schemas", "tables_columns", "keys_relationships", "constraints_indexes", "storage_rows_shapes", "profiles_samples", "programmable_objects", "synonyms_sequences", "computed_columns_extended_properties", "agent_jobs", "dependencies_lineage", "pipelines_external_references", "cardinality_orphans", "quality_classification_duplicates", "high_connectivity", "manifests_checksums_errors"}
+        expected = {"server_database_metadata", "schemas", "tables_columns", "keys_relationships", "constraints_indexes", "storage_rows_shapes", "profiles_samples", "programmable_objects", "synonyms_sequences", "computed_columns_extended_properties", "agent_jobs", "dependencies_lineage", "pipelines_external_references", "cardinality_orphans", "quality_classification_duplicates", "high_connectivity", "manifests_checksums_errors", "database_storage_layout", "partitioning_compression", "types_statistics", "fulltext_change_features", "database_scoped_features", "optional_security_metadata"}
         self.assertEqual(set(DISCOVERY_CAPABILITY_MATRIX), expected)
         artifacts = set(REQUIRED_OUTPUTS) | set(EXTRA_OUTPUTS)
         for capability, names in DISCOVERY_CAPABILITY_MATRIX.items():
@@ -68,7 +69,8 @@ class FullRunTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             settings = Settings(
                 server="sql01", databases=("School",), output_root=Path(directory) / "output",
-                profile_distinct_values=False, profile_mask_sensitive_data=True,
+                discovery_mode="safe-profile", profile_distinct_values=False,
+                profile_mask_sensitive_data=True,
             )
             run = SequentialRun(settings, "School")
             run.data = {
@@ -84,9 +86,67 @@ class FullRunTests(unittest.TestCase):
             self.assertRegex(row["maximum_value"], r"^\[MASKED:[0-9a-f]{16}\]$")
             self.assertNotIn("person@example.test", (run.artifact("COLUMN_PROFILE.csv")).read_text(encoding="utf-8-sig"))
 
+    def test_final_sample_classification_remasks_earlier_profile_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = SequentialRun(
+                Settings(
+                    server="sql01", databases=("School",),
+                    output_root=Path(directory) / "output",
+                    discovery_mode="safe-profile",
+                    profile_mask_sensitive_data=True,
+                ),
+                "School",
+            )
+            raw_profile_value = "12345678"
+            sample_result = classify_sensitivity("outwardno", values=("9876543210",))
+            self.assertEqual(sample_result.category, "PII")
+            identity = {
+                "server_name": "[SANITIZED]", "database_name": "School",
+                "schema_name": "dbo", "object_name": "FeeMstStudent",
+                "column_name": "outwardno", "data_type": "varchar",
+            }
+            run.data = {
+                "columns": [{
+                    "schema_name": "dbo", "object_name": "FeeMstStudent",
+                    "column_name": "outwardno", "data_type": "varchar",
+                }],
+                "extended_properties": [],
+                "sample_sensitivity": {("dbo", "FeeMstStudent", "outwardno"): sample_result},
+                "column_profile": [{
+                    **identity,
+                    "sensitivity_category": "Unknown", "masking_action": "PRESERVE",
+                    "sensitivity_confidence": "LOW",
+                    "sensitivity_evidence": "NO_SENSITIVITY_SIGNAL",
+                    "minimum_value": "", "maximum_value": raw_profile_value,
+                    "profile_status": "PROFILED",
+                }],
+                "low_cardinality_values": [{
+                    **identity,
+                    "sensitivity_category": "Unknown", "masking_action": "PRESERVE",
+                    "sensitivity_confidence": "LOW",
+                    "sensitivity_evidence": "NO_SENSITIVITY_SIGNAL",
+                    "value": raw_profile_value, "value_count": 1, "total_rows": 1,
+                }],
+            }
+
+            run.prompt09_sensitivity()
+
+            profile = run.data["column_profile"][0]
+            distribution = run.data["low_cardinality_values"][0]
+            self.assertEqual(profile["sensitivity_category"], "PII")
+            self.assertRegex(profile["maximum_value"], r"^\[MASKED:[0-9a-f]{16}\]$")
+            self.assertEqual(distribution["sensitivity_category"], "PII")
+            self.assertRegex(distribution["value"], r"^\[MASKED:[0-9a-f]{16}\]$")
+            persisted = "\n".join(
+                run.artifact(name).read_text(encoding="utf-8-sig")
+                for name in ("COLUMN_PROFILE.csv", "LOW_CARDINALITY_VALUES.csv", "SENSITIVITY_CLASSIFICATION.csv")
+            )
+            self.assertNotIn(raw_profile_value, persisted)
+
     def test_only_known_inaccessibility_errors_can_continue(self) -> None:
         self.assertTrue(_is_access_limitation(Exception("Could not use view because of binding errors")))
         self.assertTrue(_is_access_limitation(Exception("SELECT permission denied")))
+        self.assertTrue(_is_access_limitation(Exception("The user does not have permission to perform this action")))
         self.assertFalse(_is_access_limitation(Exception("Invalid column name in project query")))
 
     def test_dependency_query_uses_catalog_join_for_target_column(self) -> None:

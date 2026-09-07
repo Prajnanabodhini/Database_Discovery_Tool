@@ -1,10 +1,10 @@
 """Two/three-run comparison services plus v2 compatibility exports."""
 
-from .engine import compare_run_paths
+from .engine import compare_run_paths, summarize_rows
 from .exporters import export_comparison
 from .loaders import RunSnapshot, load_run
 from .normalizers import read_csv_rows as _read_rows
-from .diff import compare_rows
+from .diff import compare_rows, row_matches_status, row_status_tokens
 
 
 def write_database_comparison(output_root, runs):
@@ -18,4 +18,5 @@ def write_database_comparison(output_root, runs):
 __all__ = [
     "RunSnapshot", "compare_rows", "compare_run_paths", "export_comparison",
     "load_run", "write_database_comparison", "_read_rows",
+    "row_matches_status", "row_status_tokens", "summarize_rows",
 ]

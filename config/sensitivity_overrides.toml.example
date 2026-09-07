@@ -1,0 +1,26 @@
+# Optional sensitivity overrides. Copy this file to sensitivity_overrides.toml.
+# Keep environment-specific identifiers local unless they are safe to commit.
+# Exact matches take priority over patterns; file order breaks ties. Overrides run
+# before built-in names, extended-property heuristics, and value-pattern signals.
+
+[[rules]]
+match = "exact"
+database = "Example SchoolERP"
+schema = "dbo"
+table = "Student"
+column = "LocalLegacyField"
+category = "PII"
+action = "PSEUDONYMIZE"
+confidence = "HIGH"
+reason = "Locally documented student identifier"
+
+[[rules]]
+match = "pattern"
+database = "*"
+schema = "*"
+table = "*"
+column = "*_PublicLabel"
+category = "Non-sensitive"
+action = "PRESERVE"
+confidence = "HIGH"
+reason = "Explicitly reviewed public label"

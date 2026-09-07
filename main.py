@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -19,6 +20,7 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command")
     web = commands.add_parser("web", help="Launch the localhost-only dashboard")
     web.add_argument("--no-browser", action="store_true", help="Do not open the system browser")
+    commands.add_parser("self-test", help="Run the offline developer test suite; never connects or creates evidence")
     commands.add_parser("test-connection", help="Run the safe console connection check")
     cli = commands.add_parser("cli", help="Run a predefined discovery mode from the console")
     cli.add_argument("--mode", required=True, choices=("metadata", "metadata+logic", "safe-profile", "full-readonly"))
@@ -30,6 +32,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     command = args.command or "web"
+    if command == "self-test":
+        from mssql_database_documenter.selftest import run_self_test
+
+        result = run_self_test(project_root=PROJECT_ROOT)
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "PASS" else 1
     if command == "web":
         from mssql_database_documenter.web.app import run_web
 

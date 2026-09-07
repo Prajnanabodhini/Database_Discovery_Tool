@@ -9,6 +9,34 @@ from typing import Any, Iterable
 from .normalizers import number, stable_key, stable_text
 
 
+def row_status_tokens(row: dict[str, Any]) -> frozenset[str]:
+    """Return every primary, interval, and timeline status carried by a row."""
+    values = [row.get("status")]
+    values.extend((row.get("intervals") or {}).values())
+    values.extend(row.get("timeline_events") or ())
+    return frozenset(str(value).upper() for value in values if value)
+
+
+def row_matches_status(row: dict[str, Any], requested: str) -> bool:
+    """Match a UI status filter against the complete three-run event history."""
+    wanted = requested.strip().upper()
+    if not wanted:
+        return True
+    tokens = row_status_tokens(row)
+    if wanted == "CHANGED_ONLY":
+        return any(
+            token == "CHANGED"
+            or token.startswith("CHANGED_")
+            or token == "REVERTED_TO_A"
+            for token in tokens
+        )
+    if wanted == "ADDED":
+        return any(token == "ADDED" or token.startswith("ADDED_IN_") for token in tokens)
+    if wanted == "REMOVED":
+        return any(token == "REMOVED" or token.startswith("REMOVED_IN_") for token in tokens)
+    return wanted in tokens
+
+
 def _pair_status(left: dict[str, Any] | None, right: dict[str, Any] | None, fields: tuple[str, ...], left_available: bool, right_available: bool) -> str:
     if not left_available and not right_available:
         return "NOT_AVAILABLE"

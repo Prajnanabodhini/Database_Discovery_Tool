@@ -8,8 +8,9 @@ from pathlib import Path
 import sys
 
 from .config import ConfigurationError, Settings
+from .mode_policy import resolve_mode_policy
 from .programmable_queries import PROGRAMMABLE_QUERIES, SQL_AGENT_QUERY
-from .queries import METADATA_QUERIES, QUERIES, get_query
+from .queries import METADATA_QUERIES, QUERIES, SECURITY_METADATA_QUERIES, get_query
 from .redaction import redact_text
 from .safety import ReadOnlyCursor, UnsafeSqlError, validate_read_only_sql
 
@@ -35,10 +36,12 @@ def _parser() -> argparse.ArgumentParser:
 
 def _dry_run(settings: Settings) -> int:
     validated = []
-    for query in QUERIES + METADATA_QUERIES + PROGRAMMABLE_QUERIES + (SQL_AGENT_QUERY,):
+    for query in QUERIES + METADATA_QUERIES + SECURITY_METADATA_QUERIES + PROGRAMMABLE_QUERIES + (SQL_AGENT_QUERY,):
         validate_read_only_sql(query.sql)
         validated.append({"name": query.name, "stage": query.stage, "status": "SAFE"})
-    print(json.dumps({"status": "PASS", "connection_attempted": False, "queries": validated, "configuration": settings.sanitized()}, indent=2))
+    policy = resolve_mode_policy(settings)
+    configuration = {**settings.sanitized(), "resolved_mode_policy": policy.as_dict()}
+    print(json.dumps({"status": "PASS", "connection_attempted": False, "queries": validated, "configuration": configuration}, indent=2))
     return 0
 
 

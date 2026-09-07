@@ -1,10 +1,19 @@
 from pathlib import Path
+import importlib.metadata
+import tomllib
 import unittest
 
+from mssql_database_documenter import __version__
 from mssql_database_documenter.config import ConfigurationError, Settings
 
 
 class SettingsTests(unittest.TestCase):
+    def test_package_and_project_versions_are_one_v31_identity(self) -> None:
+        project = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(__version__, "0.3.1")
+        self.assertEqual(project["project"]["version"], __version__)
+        self.assertEqual(importlib.metadata.version("mssql-database-documenter"), __version__)
+
     def test_v3_env_example_is_complete_parseable_and_non_secret(self) -> None:
         example = Path(__file__).parents[1] / ".env.example"
         source = example.read_text(encoding="utf-8")
@@ -15,11 +24,22 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.profile_exact_row_count_threshold, 100_000)
         self.assertEqual(settings.web_host, "127.0.0.1")
         self.assertEqual(settings.max_concurrent_discovery_jobs, 1)
+        self.assertEqual(settings.git_export_sample_policy, "exclude")
+        self.assertTrue(settings.sample_tables)
+        self.assertTrue(settings.sample_views)
+        self.assertTrue(settings.sample_large_tables)
+        self.assertEqual(settings.sample_row_limit, 100)
+        self.assertEqual(settings.full_readonly_sample_row_limit, 500)
+        self.assertEqual(settings.full_readonly_profile_threshold, 5_000_000)
+        self.assertEqual(settings.full_readonly_exact_count_threshold, 500_000)
+        self.assertEqual(settings.full_readonly_relationship_threshold, 5_000_000)
+        self.assertEqual(settings.full_readonly_low_cardinality_limit, 200)
+        self.assertTrue(settings.full_readonly_extended_validation)
         for line in source.splitlines():
             if "=" not in line or line.lstrip().startswith("#"):
                 continue
             key, value = line.split("=", 1)
-            if key in {"MSSQL_TRUSTED_CONNECTION", "MSSQL_ENCRYPT", "MSSQL_TRUST_SERVER_CERTIFICATE", "PROFILE_INCLUDE_SAMPLE_DATA", "PROFILE_MASK_SENSITIVE_DATA", "PROFILE_EXACT_ROW_COUNTS", "PROFILE_DISTINCT_VALUES", "DISCOVER_SQL_AGENT_JOBS", "SANITIZE_SERVER_NAME", "WEB_AUTO_OPEN_BROWSER", "ENABLE_THREE_RUN_COMPARISON"}:
+            if key in {"MSSQL_TRUSTED_CONNECTION", "MSSQL_ENCRYPT", "MSSQL_TRUST_SERVER_CERTIFICATE", "SAMPLE_TABLES", "SAMPLE_VIEWS", "SAMPLE_LARGE_TABLES", "PROFILE_INCLUDE_SAMPLE_DATA", "PROFILE_MASK_SENSITIVE_DATA", "PROFILE_EXACT_ROW_COUNTS", "PROFILE_DISTINCT_VALUES", "FULL_READONLY_EXTENDED_VALIDATION", "DISCOVER_SQL_AGENT_JOBS", "DISCOVER_SECURITY_METADATA", "SANITIZE_SERVER_NAME", "WEB_AUTO_OPEN_BROWSER", "ENABLE_THREE_RUN_COMPARISON"}:
                 self.assertIn(value, {"true", "false", "yes", "no"})
         self.assertNotIn("password=", source.casefold().replace("# mssql_password=", ""))
 
@@ -114,6 +134,38 @@ class SettingsTests(unittest.TestCase):
             Settings(max_concurrent_discovery_jobs=2).validate_for_web()
         with self.assertRaises(ConfigurationError):
             Settings(web_port=70000).validate_for_web()
+
+    def test_git_export_sample_policy_is_fail_closed(self) -> None:
+        masked = Settings.from_environment(env={"GIT_EXPORT_SAMPLE_POLICY": "MASKED_ONLY"}, dotenv_path=None)
+        self.assertEqual(masked.git_export_sample_policy, "masked_only")
+        with self.assertRaises(ConfigurationError):
+            Settings.from_environment(env={"GIT_EXPORT_SAMPLE_POLICY": "raw"}, dotenv_path=None)
+
+    def test_canonical_sampling_settings_and_legacy_fallback(self) -> None:
+        canonical = Settings.from_environment(
+            env={
+                "SAMPLE_TABLES": "false", "SAMPLE_VIEWS": "true",
+                "SAMPLE_LARGE_TABLES": "false", "SAMPLE_ROW_LIMIT": "17",
+                "PROFILE_SAMPLE_ROWS": "999", "PROFILE_INCLUDE_SAMPLE_DATA": "false",
+            },
+            dotenv_path=None,
+        )
+        self.assertFalse(canonical.sample_tables)
+        self.assertTrue(canonical.sample_views)
+        self.assertFalse(canonical.sample_large_tables)
+        self.assertEqual(canonical.sample_row_limit, 17)
+        self.assertEqual(canonical.profile_sample_rows, 17)
+        self.assertTrue(canonical.profile_include_sample_data)
+
+        legacy = Settings.from_environment(
+            env={"PROFILE_SAMPLE_ROWS": "12", "PROFILE_INCLUDE_SAMPLE_DATA": "false"},
+            dotenv_path=None,
+        )
+        self.assertEqual(legacy.sample_row_limit, 12)
+        self.assertFalse(legacy.sample_tables)
+        self.assertFalse(legacy.sample_views)
+        with self.assertRaises(ConfigurationError):
+            Settings.from_environment(env={"SAMPLE_ROW_LIMIT": "0"}, dotenv_path=None)
 
 
 if __name__ == "__main__":

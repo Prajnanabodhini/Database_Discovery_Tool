@@ -17,16 +17,18 @@
 </section>
 <section class="panel" id="compare-results" hidden>
   <div class="panel-heading"><div><p class="eyebrow">Comparison result</p><h2 id="compare-title">Timeline</h2></div><label>Object type<select id="compare-category"></select></label></div>
-  <p id="compare-semantic-note" class="range"></p><div id="compare-warnings"></div><div class="summary-strip" id="compare-summary"></div>
+  <p id="compare-semantic-note" class="range"></p><div id="compare-warnings"></div>
+  <p class="range"><strong>Global totals</strong> count every row in every displayed/exported category once; analytical categories may overlap in the source evidence.</p><div class="summary-strip" id="compare-global-summary"></div>
   <div class="compare-filter-grid">
     <label>Status<select id="compare-status"><option value="">All statuses</option><option value="CHANGED_ONLY">Changed only</option><option value="ADDED">Added</option><option value="REMOVED">Removed</option><option value="UNCHANGED">Unchanged</option><option value="NOT_AVAILABLE">Not available</option><option value="NOT_COMPARABLE">Not comparable</option></select></label>
     <label>Object search<input id="compare-search" type="search" placeholder="Name or identity"></label><label>Schema<input id="compare-schema" type="search" placeholder="Schema"></label>
     <label>Severity<select id="compare-severity"><option value="">All severities</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option><option>Informational</option></select></label>
     <label>Database<select id="compare-database"><option value="">All selected databases</option></select></label><label class="checkbox-label"><input id="compare-issues" type="checkbox"> Warnings/errors only</label>
   </div>
-  <details class="help-details"><summary>Understand filters and result columns</summary><p>Status limits change types. Object search and Schema narrow identities. Severity applies only to evidence carrying severity. Warnings/errors only focuses on operational issues. A-to-B, B-to-C, and A-to-C show interval results; numeric deltas are arithmetic only when compatible values exist.</p></details>
+  <details class="help-details"><summary>Understand filters and result columns</summary><p>Status checks the complete history: primary status, timeline events, and A-to-B/B-to-C/A-to-C interval statuses. An object added in B and changed in C therefore appears under both Added and Changed only. Reverts and remove/re-add histories remain visible. Object search and Schema narrow identities. Severity applies only to evidence carrying severity. Warnings/errors only focuses on operational issues. Numeric deltas are arithmetic only when compatible values exist.</p></details>
   <div id="compare-source-links" class="source-links"></div><p id="compare-range" class="range"></p>
-  <div class="table-scroll"><table><thead><tr><th>Object</th><th>Run A</th><th>Run B</th><th>Run C</th><th>A to B</th><th>B to C</th><th>A to C</th><th>Numeric values/deltas</th><th>Definition comparisons</th></tr></thead><tbody id="compare-rows"></tbody></table></div>
+  <p class="range"><strong>Selected category totals</strong> describe all rows matching the current filters, not only the current page.</p><div class="summary-strip" id="compare-category-summary"></div>
+  <div class="table-scroll"><table><thead><tr><th>Object</th><th>Timeline events</th><th>Run A</th><th>Run B</th><th>Run C</th><th>A to B</th><th>B to C</th><th>A to C</th><th>Numeric values/deltas</th><th>Definition comparisons</th></tr></thead><tbody id="compare-rows"></tbody></table></div>
   <nav class="pager" id="compare-pager" aria-label="Comparison pages"><button class="secondary" id="compare-previous" type="button">Previous</button><span id="compare-page">Page 1</span><button class="secondary" id="compare-next" type="button">Next</button></nav>
 </section>
 {% endblock %}

@@ -52,7 +52,7 @@ formatted presentation never replaces source evidence.
 - [x] Metadata + Logic.
 - [x] Safe Profile.
 - [x] Full Read-Only confirmation.
-- [x] Generate Reports action.
+- [x] Offline Regenerate Reports action for one selected manifested run.
 - [x] Explicit Git export.
 - [x] Status/progress/logs and safe cancellation.
 - [x] No arbitrary command, shell, Python, or SQL endpoint.
@@ -70,6 +70,11 @@ formatted presentation never replaces source evidence.
 - [x] Explicit HTML/CSV/JSON comparison export.
 
 Overall result: **PASS**.
+
+This PASS covers the implemented HTML feature surface only. It is not a product
+freeze declaration. The classification-reconciliation defect found by the 2026-09-06
+DB1 run is repaired and passes offline regression, but a fresh ordered DB1 live
+validation is still required before later live gates or freeze.
 
 Reverified on 2026-08-31 through automated renderer/Web tests and interactive desktop
 and 390-pixel responsive browser checks. The mobile document width equals the viewport;

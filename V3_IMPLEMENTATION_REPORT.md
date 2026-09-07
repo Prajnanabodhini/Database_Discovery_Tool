@@ -1,5 +1,28 @@
 # v3 Master Prompt Implementation Report
 
+## 2026-09-07 v3.1 remediation addendum
+
+The v3.1 remediation remains an in-place repair of this application, not a rebuild.
+Release identity is now centralized as `0.3.1` in the package and reused by inventory
+and reporting manifests; `pyproject.toml` is checked against that source by regression.
+
+The late-classification containment failure found by DB1 run `20260906_150848` is
+repaired in `profiling/stages.py`. Final sample-derived sensitivity is reconciled into
+earlier column-profile and low-cardinality evidence, the strongest earlier sensitive
+classification is never downgraded, and affected values are re-masked before the
+final evidence audit. The regression reproducing Unknown-to-PII promotion passes.
+
+Fresh offline evidence on 2026-09-07:
+
+- complete suite: 159 passed, 2 skipped, 241 subtests;
+- Prompt 11 focused report-regeneration gate: 3 passed (12 unrelated Web tests deselected);
+- Prompt 12 CI/runtime gate: 6 passed; public self-test PASS;
+- self-test reported no connection attempt and no output/export creation;
+- existing runtime-root file counts remained unchanged.
+
+The historical failed run was not edited or exported. Fresh live DB1 revalidation is
+pending explicit authorization, so this addendum does not declare v3.1 ready to freeze.
+
 ## 2026-08-31 repair verification
 
 This report now includes the post-audit repair. Sensitive profile extrema are masked

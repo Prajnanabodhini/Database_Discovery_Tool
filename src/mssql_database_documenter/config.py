@@ -15,6 +15,7 @@ class ConfigurationError(ValueError):
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 VALID_MODES = frozenset({"metadata", "metadata+logic", "safe-profile", "full-readonly"})
+VALID_GIT_EXPORT_SAMPLE_POLICIES = frozenset({"exclude", "masked_only"})
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
@@ -82,7 +83,18 @@ class Settings:
     profile_distinct_values: bool = True
     profile_max_distinct_values: int = 50
     profile_large_table_threshold: int = 1_000_000
+    sample_tables: bool = True
+    sample_views: bool = True
+    sample_large_tables: bool = True
+    sample_row_limit: int = 100
+    full_readonly_sample_row_limit: int = 500
+    full_readonly_profile_threshold: int = 5_000_000
+    full_readonly_exact_count_threshold: int = 500_000
+    full_readonly_relationship_threshold: int = 5_000_000
+    full_readonly_low_cardinality_limit: int = 200
+    full_readonly_extended_validation: bool = True
     discover_sql_agent_jobs: bool = True
+    discover_security_metadata: bool = False
     output_root: Path = Path("output")
     git_export_root: Path = Path("git_export")
     sanitize_server_name: bool = True
@@ -91,6 +103,8 @@ class Settings:
     web_auto_open_browser: bool = True
     max_concurrent_discovery_jobs: int = 1
     enable_three_run_comparison: bool = True
+    sensitivity_overrides_file: Path = Path("config/sensitivity_overrides.toml")
+    git_export_sample_policy: str = "exclude"
 
     @classmethod
     def from_environment(
@@ -114,6 +128,17 @@ class Settings:
         if mode not in VALID_MODES:
             raise ConfigurationError(f"DISCOVERY_MODE must be one of: {', '.join(sorted(VALID_MODES))}")
 
+        git_export_sample_policy = _get(merged, "GIT_EXPORT_SAMPLE_POLICY", "exclude").strip().casefold()
+        if git_export_sample_policy not in VALID_GIT_EXPORT_SAMPLE_POLICIES:
+            raise ConfigurationError("GIT_EXPORT_SAMPLE_POLICY must be exclude or masked_only")
+
+        legacy_sample_enabled = _parse_bool(_get(merged, "PROFILE_INCLUDE_SAMPLE_DATA", "true"), "PROFILE_INCLUDE_SAMPLE_DATA")
+        legacy_sample_rows = _parse_int(_get(merged, "PROFILE_SAMPLE_ROWS", "100"), "PROFILE_SAMPLE_ROWS", minimum=1)
+        sample_tables = _parse_bool(_get(merged, "SAMPLE_TABLES", str(legacy_sample_enabled)), "SAMPLE_TABLES")
+        sample_views = _parse_bool(_get(merged, "SAMPLE_VIEWS", str(legacy_sample_enabled)), "SAMPLE_VIEWS")
+        sample_large_tables = _parse_bool(_get(merged, "SAMPLE_LARGE_TABLES", "true"), "SAMPLE_LARGE_TABLES")
+        sample_row_limit = _parse_int(_get(merged, "SAMPLE_ROW_LIMIT", str(legacy_sample_rows)), "SAMPLE_ROW_LIMIT", minimum=1)
+
         return cls(
             server=_get(merged, "MSSQL_SERVER").strip(),
             databases=databases,
@@ -125,15 +150,26 @@ class Settings:
             trust_server_certificate=_parse_bool(_get(merged, "MSSQL_TRUST_SERVER_CERTIFICATE", "yes"), "MSSQL_TRUST_SERVER_CERTIFICATE"),
             query_timeout_seconds=_parse_int(_get(merged, "MSSQL_QUERY_TIMEOUT_SECONDS", "60"), "MSSQL_QUERY_TIMEOUT_SECONDS", minimum=1),
             discovery_mode=mode,
-            profile_sample_rows=_parse_int(_get(merged, "PROFILE_SAMPLE_ROWS", "100"), "PROFILE_SAMPLE_ROWS"),
-            profile_include_sample_data=_parse_bool(_get(merged, "PROFILE_INCLUDE_SAMPLE_DATA", "true"), "PROFILE_INCLUDE_SAMPLE_DATA"),
+            profile_sample_rows=sample_row_limit,
+            profile_include_sample_data=sample_tables or sample_views,
             profile_mask_sensitive_data=_parse_bool(_get(merged, "PROFILE_MASK_SENSITIVE_DATA", "true"), "PROFILE_MASK_SENSITIVE_DATA"),
             profile_exact_row_counts=_parse_bool(_get(merged, "PROFILE_EXACT_ROW_COUNTS", "false"), "PROFILE_EXACT_ROW_COUNTS"),
             profile_exact_row_count_threshold=_parse_int(_get(merged, "PROFILE_EXACT_ROW_COUNT_THRESHOLD", "100000"), "PROFILE_EXACT_ROW_COUNT_THRESHOLD", minimum=1),
             profile_distinct_values=_parse_bool(_get(merged, "PROFILE_DISTINCT_VALUES", "true"), "PROFILE_DISTINCT_VALUES"),
             profile_max_distinct_values=_parse_int(_get(merged, "PROFILE_MAX_DISTINCT_VALUES", "50"), "PROFILE_MAX_DISTINCT_VALUES", minimum=1),
             profile_large_table_threshold=_parse_int(_get(merged, "PROFILE_LARGE_TABLE_THRESHOLD", "1000000"), "PROFILE_LARGE_TABLE_THRESHOLD", minimum=1),
+            sample_tables=sample_tables,
+            sample_views=sample_views,
+            sample_large_tables=sample_large_tables,
+            sample_row_limit=sample_row_limit,
+            full_readonly_sample_row_limit=_parse_int(_get(merged, "FULL_READONLY_SAMPLE_ROW_LIMIT", "500"), "FULL_READONLY_SAMPLE_ROW_LIMIT", minimum=1),
+            full_readonly_profile_threshold=_parse_int(_get(merged, "FULL_READONLY_PROFILE_THRESHOLD", "5000000"), "FULL_READONLY_PROFILE_THRESHOLD", minimum=1),
+            full_readonly_exact_count_threshold=_parse_int(_get(merged, "FULL_READONLY_EXACT_COUNT_THRESHOLD", "500000"), "FULL_READONLY_EXACT_COUNT_THRESHOLD", minimum=1),
+            full_readonly_relationship_threshold=_parse_int(_get(merged, "FULL_READONLY_RELATIONSHIP_THRESHOLD", "5000000"), "FULL_READONLY_RELATIONSHIP_THRESHOLD", minimum=1),
+            full_readonly_low_cardinality_limit=_parse_int(_get(merged, "FULL_READONLY_LOW_CARDINALITY_LIMIT", "200"), "FULL_READONLY_LOW_CARDINALITY_LIMIT", minimum=1),
+            full_readonly_extended_validation=_parse_bool(_get(merged, "FULL_READONLY_EXTENDED_VALIDATION", "true"), "FULL_READONLY_EXTENDED_VALIDATION"),
             discover_sql_agent_jobs=_parse_bool(_get(merged, "DISCOVER_SQL_AGENT_JOBS", "true"), "DISCOVER_SQL_AGENT_JOBS"),
+            discover_security_metadata=_parse_bool(_get(merged, "DISCOVER_SECURITY_METADATA", "false"), "DISCOVER_SECURITY_METADATA"),
             output_root=Path(_get(merged, "OUTPUT_ROOT", "output")),
             git_export_root=Path(_get(merged, "GIT_EXPORT_ROOT", "git_export")),
             sanitize_server_name=_parse_bool(_get(merged, "SANITIZE_SERVER_NAME", "true"), "SANITIZE_SERVER_NAME"),
@@ -142,6 +178,8 @@ class Settings:
             web_auto_open_browser=_parse_bool(_get(merged, "WEB_AUTO_OPEN_BROWSER", "true"), "WEB_AUTO_OPEN_BROWSER"),
             max_concurrent_discovery_jobs=_parse_int(_get(merged, "MAX_CONCURRENT_DISCOVERY_JOBS", "1"), "MAX_CONCURRENT_DISCOVERY_JOBS", minimum=1),
             enable_three_run_comparison=_parse_bool(_get(merged, "ENABLE_THREE_RUN_COMPARISON", "true"), "ENABLE_THREE_RUN_COMPARISON"),
+            sensitivity_overrides_file=Path(_get(merged, "SENSITIVITY_OVERRIDES_FILE", "config/sensitivity_overrides.toml")),
+            git_export_sample_policy=git_export_sample_policy,
         )
 
     def with_database_override(self, database: str | None) -> "Settings":
@@ -202,7 +240,18 @@ class Settings:
             "profile_distinct_values": self.profile_distinct_values,
             "profile_max_distinct_values": self.profile_max_distinct_values,
             "profile_large_table_threshold": self.profile_large_table_threshold,
+            "sample_tables": self.sample_tables,
+            "sample_views": self.sample_views,
+            "sample_large_tables": self.sample_large_tables,
+            "sample_row_limit": self.sample_row_limit,
+            "full_readonly_sample_row_limit": self.full_readonly_sample_row_limit,
+            "full_readonly_profile_threshold": self.full_readonly_profile_threshold,
+            "full_readonly_exact_count_threshold": self.full_readonly_exact_count_threshold,
+            "full_readonly_relationship_threshold": self.full_readonly_relationship_threshold,
+            "full_readonly_low_cardinality_limit": self.full_readonly_low_cardinality_limit,
+            "full_readonly_extended_validation": self.full_readonly_extended_validation,
             "discover_sql_agent_jobs": self.discover_sql_agent_jobs,
+            "discover_security_metadata": self.discover_security_metadata,
             "output_root": str(self.output_root),
             "git_export_root": str(self.git_export_root),
             "sanitize_server_name": self.sanitize_server_name,
@@ -211,4 +260,6 @@ class Settings:
             "web_auto_open_browser": self.web_auto_open_browser,
             "max_concurrent_discovery_jobs": self.max_concurrent_discovery_jobs,
             "enable_three_run_comparison": self.enable_three_run_comparison,
+            "sensitivity_overrides_file": str(self.sensitivity_overrides_file),
+            "git_export_sample_policy": self.git_export_sample_policy,
         }

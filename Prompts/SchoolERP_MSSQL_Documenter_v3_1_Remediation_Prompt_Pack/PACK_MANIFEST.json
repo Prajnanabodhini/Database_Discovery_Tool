@@ -1,0 +1,29 @@
+{
+  "pack_name": "SchoolERP_MSSQL_Documenter_v3_1_Remediation_Prompt_Pack",
+  "version": "3.1-remediation",
+  "created_date": "2026-09-06",
+  "repository": "Prajnanabodhini/Database_Discovery_Tool",
+  "frozen_audited_sha": "1c608d12d7c0f107931144dbbdc4e536865ab546",
+  "execution_order": [
+    "00_START_HERE.md",
+    "01_MASTER_REMEDIATION_PROMPT.md",
+    "02_BASELINE_AND_GUARDRAILS.md",
+    "03_PII_AND_GIT_EXPORT_HARDENING.md",
+    "04_SAMPLE_COVERAGE_VIEWS_LARGE_TABLES.md",
+    "05_DISCOVERY_MODE_SEMANTICS.md",
+    "06_SQL_AGENT_PIPELINE_LINEAGE.md",
+    "07_MSSQL_METADATA_COMPLETENESS.md",
+    "08_MODULARIZE_FULLRUN.md",
+    "09_RUNTIME_SELF_TEST_DECOUPLING.md",
+    "10_COMPARISON_AND_EXPORT_FIXES.md",
+    "11_REPORT_REGENERATION_ACTION.md",
+    "12_CI_AND_DEVELOPER_QUALITY_GATE.md",
+    "13_OFFLINE_REGRESSION_AND_SECURITY_GATE.md",
+    "14_LIVE_READONLY_VALIDATION.md",
+    "15_FINAL_FINE_COMB_AND_FREEZE.md"
+  ],
+  "live_db_authorization_required": true,
+  "rebuild_allowed": false,
+  "historical_runtime_evidence_must_be_preserved": true,
+  "git_export_sample_default": "exclude"
+}

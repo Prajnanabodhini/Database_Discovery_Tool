@@ -2,4 +2,17 @@
 
 LINEAGE_TYPES = frozenset({"DIRECT", "DERIVED", "AGGREGATED", "CONDITIONAL", "UNKNOWN"})
 
-__all__ = ("LINEAGE_TYPES",)
+from .agent import (  # noqa: E402
+    RAW_COMMAND_FIELD,
+    SQL_AGENT_PIPELINE_HEADERS,
+    SQL_AGENT_REFERENCE_HEADERS,
+    analyze_agent_steps,
+)
+
+__all__ = (
+    "LINEAGE_TYPES",
+    "RAW_COMMAND_FIELD",
+    "SQL_AGENT_PIPELINE_HEADERS",
+    "SQL_AGENT_REFERENCE_HEADERS",
+    "analyze_agent_steps",
+)

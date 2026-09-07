@@ -61,6 +61,7 @@ def _derive_summary(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     else:
         status = "PARTIAL"
     configuration = manifest.get("configuration") or {}
+    resolved_policy = manifest.get("resolved_mode_policy") or configuration.get("resolved_mode_policy") or {}
     return {
         "run_id": manifest.get("run_id") or root.name.removeprefix("run_"),
         "database": manifest.get("database") or root.parent.name,
@@ -70,17 +71,21 @@ def _derive_summary(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         "status": status,
         "tool_version": manifest.get("tool_version", "UNKNOWN"),
         "sql_server_version": ((manifest.get("sql_server_capabilities") or [{}])[0]).get("product_version", "UNKNOWN"),
-        "sample_rows": configuration.get("profile_sample_rows", "UNKNOWN"),
+        "sample_rows": configuration.get("sample_row_limit", configuration.get("profile_sample_rows", "UNKNOWN")),
         "exact_row_counts": configuration.get("profile_exact_row_counts", "UNKNOWN"),
         "mask_sensitive_data": configuration.get("profile_mask_sensitive_data", "UNKNOWN"),
         "profile_settings": {
-            "sample_rows": configuration.get("profile_sample_rows", "UNKNOWN"),
+            "sample_rows": configuration.get("sample_row_limit", configuration.get("profile_sample_rows", "UNKNOWN")),
             "include_sample_data": configuration.get("profile_include_sample_data", "UNKNOWN"),
+            "sample_tables": configuration.get("sample_tables", configuration.get("profile_include_sample_data", "UNKNOWN")),
+            "sample_views": configuration.get("sample_views", configuration.get("profile_include_sample_data", "UNKNOWN")),
+            "sample_large_tables": configuration.get("sample_large_tables", "UNKNOWN"),
             "mask_sensitive_data": configuration.get("profile_mask_sensitive_data", "UNKNOWN"),
             "exact_row_counts": configuration.get("profile_exact_row_counts", "UNKNOWN"),
             "exact_row_count_threshold": configuration.get("profile_exact_row_count_threshold", "UNKNOWN"),
             "large_table_threshold": configuration.get("profile_large_table_threshold", "UNKNOWN"),
         },
+        "resolved_mode_policy": resolved_policy,
         "completed_stage_count": sum(value == "PASS" for value in statuses),
         "completion_coverage": f"{sum(value in {'PASS', 'SKIPPED_BY_MODE'} for value in statuses)}/{expected_stage_count}" if expected_stage_count else "0/0",
         "error_count": failed_stage_count,
