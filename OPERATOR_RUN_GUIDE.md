@@ -38,14 +38,13 @@ The old failed output `20260906_150848` remains unsafe local diagnostic evidence
 never edit, share, or export it. Full-readonly was not separately authorized during
 the remediation validation and was not rerun.
 
-A post-freeze audit found an initial discovery run-root junction escape. The
-working tree now rejects database-parent reparse points before inventory or
-full discovery can create evidence outside `OUTPUT_ROOT`, and its local
-offline/security gates pass. The release status is:
-**NOT READY TO FREEZE — REPAIRED CANDIDATE CI PENDING.** The repair must be
-committed and pass Windows/Python 3.11 GitHub Actions before the final
-fine-comb gate can restore the freeze declaration. No tag, deployment, database
-change, or production maintenance window has been created.
+A post-freeze audit found and repaired an initial discovery run-root junction
+escape. The candidate rejects database-parent reparse points before inventory
+or full discovery can create evidence outside `OUTPUT_ROOT`. Its local gates
+and Windows/Python 3.11 GitHub Actions run `34141997707` pass:
+**MSSQL DOCUMENTATION TOOL v3.1.1 — READY TO FREEZE.** No tag, release,
+deployment, database change, or production maintenance window has been
+created.
 
 ## Offline developer self-test
 

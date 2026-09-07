@@ -6,14 +6,12 @@ The v3 interface preserves the v2 discovery engine and evidence contract. It add
 
 ## Current v3.1.1 freeze status
 
-**NOT READY TO FREEZE — REPAIRED CANDIDATE CI PENDING.** A post-freeze audit
-found and repaired an initial discovery run-root junction escape. The corrected
-working tree passes 192 offline tests, 2 platform-privilege skips, and 251
-subtests, including direct inventory and full-run junction regressions. The
-repair must be committed and pass Windows/Python 3.11 GitHub Actions before the
-freeze declaration can be restored. Run `34119252029` remains valid historical
-evidence for the superseded candidate
-`d47dd7b2cd53a25db6fccbb119b2fe219e2e8c1d`.
+**MSSQL DOCUMENTATION TOOL v3.1.1 — READY TO FREEZE.** The repaired candidate
+passes 192 offline tests, 2 platform-privilege skips, and 251 subtests,
+including direct inventory and full-run database-parent junction regressions.
+Windows/Python 3.11 GitHub Actions run `34141997707` is green for candidate
+implementation commit
+`1dc8825c2445342e44ee59ca609770284ffd8d3b`.
 
 Fresh ordered metadata, metadata+logic, and safe-profile runs passed for both
 configured databases on 2026-09-07 using package version `0.3.1`. Both

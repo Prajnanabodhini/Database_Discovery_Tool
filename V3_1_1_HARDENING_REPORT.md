@@ -6,7 +6,7 @@
 - Starting SHA: `e2188237809efdcc324a79930640628a3975c8d6`
 - Working branch: `main`
 - Current hardening branch: `v3.1.1-hardening`
-- Candidate implementation SHA: `d47dd7b2cd53a25db6fccbb119b2fe219e2e8c1d`
+- Candidate implementation SHA: `1dc8825c2445342e44ee59ca609770284ffd8d3b`
 - Baseline date/time: `2026-09-07T10:30:21.0332931+05:30`
 - System Python: `3.11.9`
 - Project `.venv` Python: `3.13.14`
@@ -17,12 +17,12 @@
 
 ## Current freeze decision
 
-> **NOT READY TO FREEZE — REOPENED TARGETED REMEDIATION**
+> **MSSQL DOCUMENTATION TOOL v3.1.1 — READY TO FREEZE**
 
-A post-freeze read-only audit found that initial discovery run-root creation
-did not reject a pre-existing database-parent junction. Prompts 07, 09, 10,
-and 15 are being rerun in that order. The earlier freeze verdict is superseded
-until the repaired candidate passes its offline and CI gates.
+The authorized Prompt 07, 09, 10, and 15 corrective cycle repaired initial
+run-root containment and passed the complete local and Windows/Python 3.11 CI
+gates. This decision authorizes no tag, release, deployment, database change,
+or production operation.
 
 ## Authority and protected scope
 
@@ -67,7 +67,7 @@ The review confirmed the protected v3.1 safety baseline: read-only connection in
 | 12 | COMPLETE — LIVE PASS | `V3_1_1_HARDENING_REPORT.md`; ignored runtime evidence under `output/` and `git_export/` | Dry-run, connection, metadata, metadata+logic, safe-profile, evidence audit, and Git-export audit PASS | DB1 only; no full-readonly, DB2, SP/job execution, external query, or database alteration. |
 | 13 | COMPLETE — LIVE PASS | `V3_1_1_HARDENING_REPORT.md`; ignored runtime evidence under `output/` and `git_export/` | Dry-run, connection, metadata, metadata+logic, safe-profile, evidence audit, and Git-export audit PASS | DB2 only; identity/output isolation and absence of DB1 contamination verified. |
 | 14 | COMPLETE — OFFLINE SMOKE PASS (RECONFIRMED) | `V3_1_1_HARDENING_REPORT.md`; ignored exports/regeneration/comparisons under `git_export/` and `output/` | Two complete Git export, offline report regeneration, real 2-run comparison, and real 3-run comparison cycles PASS | Authorized rerun reconfirmed source preservation, offline behavior, and export safety; no runtime evidence committed. |
-| 15 | REOPENED — CANDIDATE CI PENDING | Documentation/status updates; repaired code and regressions from Prompts 07/09 | 192 passed, 2 platform-privilege skips, 251 subtests; 35-query dry-run PASS; new CI pending | Local fine-comb checks pass, but the repaired working tree has no candidate commit or matching Windows CI run yet. |
+| 15 | COMPLETE — READY TO FREEZE | Documentation/status updates; repaired code and regressions from Prompts 07/09 | 192 passed, 2 platform-privilege skips, 251 subtests; 35-query dry-run PASS; CI PASS | Candidate `1dc8825c2445342e44ee59ca609770284ffd8d3b`; Windows/Python 3.11 run `34141997707` completed successfully. |
 
 ## Initial priority register
 
@@ -1004,7 +1004,7 @@ Verification:
 - Prompt 10 rerun gate: **PASS**.
 - Next authorized prompt: Prompt 15.
 
-## Original Prompt 15 — Final fine-comb audit and freeze gate
+## Prompt 15 — Final fine-comb audit and freeze gate
 
 Prompt 15 independently audited the repository rather than accepting earlier
 report claims. The candidate implementation commit is
@@ -1106,7 +1106,7 @@ No P0, P1, or unresolved P2 finding remains.
 
 ## Final changed-file list
 
-The complete baseline-to-working-tree set contains 55 tracked files:
+The complete baseline-to-candidate set contains 56 tracked files:
 
 ```text
 .env.example
@@ -1161,12 +1161,13 @@ tests/test_config.py
 tests/test_evidence_safety.py
 tests/test_git_export_policy.py
 tests/test_inventory.py
+tests/test_path_containment.py
 tests/test_runtime_self_test.py
 tests/test_sampler.py
 tests/test_web_app.py
 ```
 
-Prompt 15 itself changes only nine documentation/governance files:
+The original Prompt 15 cycle changed nine documentation/governance files:
 `HTML_FEATURE_CHECKLIST.md`, `OPERATOR_RUN_GUIDE.md`,
 `Prompts/README.md`, `README.md`, `V3_1_1_HARDENING_REPORT.md`,
 `V3_1_FINAL_FILE_AUDIT.md`, `V3_1_REMEDIATION_REPORT.md`,
@@ -1219,13 +1220,18 @@ Local acceptance evidence for the repaired working tree:
 - prior live DB1/DB2, Git-export, regeneration, and comparison evidence remains
   preserved and internally valid.
 
-Open release gate:
+Candidate CI:
 
-- The repaired code is uncommitted, so no Windows/Python 3.11 GitHub Actions
-  run exists for the repaired candidate SHA.
+- Commit: `1dc8825c2445342e44ee59ca609770284ffd8d3b`.
+- GitHub Actions run: `34141997707`.
+- Workflow/job: `Offline developer quality gate` /
+  `Windows / Python 3.11 / offline`.
+- Result: completed successfully; checkout, dependency installation,
+  compile/import, complete offline regression suite, and clean-root assertions
+  all passed.
 
 Current decision:
 
-> **NOT READY TO FREEZE — REPAIRED CANDIDATE CI PENDING**
+> **MSSQL DOCUMENTATION TOOL v3.1.1 — READY TO FREEZE**
 
 No tag, release, deployment, or database change is authorized by this status.
