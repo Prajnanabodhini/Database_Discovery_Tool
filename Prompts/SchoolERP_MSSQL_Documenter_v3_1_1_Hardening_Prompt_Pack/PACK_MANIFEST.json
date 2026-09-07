@@ -1,0 +1,48 @@
+{
+  "pack_name": "SchoolERP_MSSQL_Documenter_v3_1_1_Hardening_Prompt_Pack",
+  "pack_version": "1.0",
+  "created_date": "2026-09-07",
+  "repository": "Prajnanabodhini/Database_Discovery_Tool",
+  "starting_head": "e2188237809efdcc324a79930640628a3975c8d6",
+  "v3_1_implementation_commit": "54477bbea476c4786c7285a9c8fd8075d04f13be",
+  "original_baseline_commit": "1c608d12d7c0f107931144dbbdc4e536865ab546",
+  "execution_order": [
+    "00_START_HERE.md",
+    "01_MASTER_HARDENING_PROMPT.md",
+    "02_BASELINE_AND_GUARDRAILS.md",
+    "03_FIX_WINDOWS_CI_PATH_CANONICALIZATION.md",
+    "04_EXTERNAL_AND_OPAQUE_VIEW_SAMPLING_GATE.md",
+    "05_GIT_EXPORT_PROFILE_VALUE_PRIVACY.md",
+    "06_CLI_REPORT_SEMANTICS.md",
+    "07_METADATA_INVENTORY_CONNECTION_FAILURE_LIFECYCLE.md",
+    "08_CODE_AND_PROMPT_GOVERNANCE_CLEANUP.md",
+    "09_TARGETED_REGRESSION_SUITE.md",
+    "10_READONLY_SECURITY_AND_EVIDENCE_REAUDIT.md",
+    "11_FULL_OFFLINE_AND_CI_GATE.md",
+    "12_LIVE_DB1_READONLY_VALIDATION.md",
+    "13_LIVE_DB2_READONLY_VALIDATION.md",
+    "14_GIT_EXPORT_REPORT_AND_COMPARISON_SMOKE.md",
+    "15_FINAL_FINE_COMB_AND_FREEZE_GATE.md"
+  ],
+  "mandatory_p1": [
+    "green Windows CI",
+    "external/opaque view sampling gate",
+    "Git profile-value privacy hardening"
+  ],
+  "mandatory_p2": [
+    "CLI report semantics",
+    "metadata inventory connection-failure lifecycle"
+  ],
+  "mandatory_p3": [
+    "duplicate decorator cleanup",
+    "prompt authority index"
+  ],
+  "live_validation_prompts": [
+    12,
+    13,
+    14
+  ],
+  "live_validation_requires_authorization": true,
+  "database_mutation_allowed": false,
+  "external_system_query_allowed": false
+}

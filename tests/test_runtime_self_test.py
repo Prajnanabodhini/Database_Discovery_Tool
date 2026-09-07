@@ -66,7 +66,7 @@ class RuntimeSelfTestDecouplingTests(unittest.TestCase):
                 ("-m", "pytest", "-q", "-p", "no:cacheprovider", "-m", "not live", "tests"),
             )
             self.assertFalse(invoked.call_args.kwargs["shell"])
-            self.assertEqual(invoked.call_args.kwargs["cwd"], root)
+            self.assertEqual(Path(invoked.call_args.kwargs["cwd"]).resolve(), root.resolve())
             connect.assert_not_called()
             new_run.assert_not_called()
             self.assertEqual(result["status"], "PASS")
