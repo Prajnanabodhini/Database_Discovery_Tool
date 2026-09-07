@@ -1,5 +1,8 @@
 # MSSQL Database Discovery Tool v3.1 Remediation Report
 
+> **Historical v3.1 remediation record.** Retained for provenance and
+> superseded as current release authority by `V3_1_1_HARDENING_REPORT.md`.
+
 ## Baseline and guardrails - Prompt 02
 
 Status: **PASS - baseline frozen; no remediation code changed**  

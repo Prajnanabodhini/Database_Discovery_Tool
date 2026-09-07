@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import sys
 
 from .config import ConfigurationError, Settings
@@ -24,14 +24,79 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser("dry-run", help="Validate all registered SQL without connecting")
     subparsers.add_parser("test-connection", help="Connect and run read-only capability queries")
     subparsers.add_parser("inventory", help="Create a metadata-only catalogue for configured databases")
-    subparsers.add_parser("all", help="Run every read-only discovery prompt sequentially")
+    subparsers.add_parser("all", help="Connect to MSSQL for a new live read-only discovery and generate its reports")
+    subparsers.add_parser("discover-and-report", help="Explicit alias for a new live read-only discovery with normal reports")
+    regenerate = subparsers.add_parser(
+        "regenerate-reports",
+        help="Regenerate presentation reports offline from one existing manifested output run",
+    )
+    regenerate.add_argument(
+        "--run", required=True,
+        help="Manifested output run path or output:<database/run_id> reference",
+    )
     subparsers.add_parser("programmable-objects", help="Run prerequisites through static programmable-object discovery")
     subparsers.add_parser("profile", help="Run prerequisites through safe profiling and sensitivity reporting")
     subparsers.add_parser("relationships", help="Run prerequisites through relationship analysis")
     subparsers.add_parser("lineage", help="Run prerequisites through lineage and external-reference analysis")
     subparsers.add_parser("pipelines", help="Run prerequisites through pipeline analysis")
-    subparsers.add_parser("report", help="Run the complete pipeline and final reporting")
     return parser
+
+
+def _load_output_run(reference: str, output_root: Path):
+    """Resolve one contained manifested output run without touching MSSQL."""
+    from .comparison import load_run
+
+    root = output_root.resolve(strict=True)
+    if reference.startswith("output:"):
+        relative = reference.removeprefix("output:")
+        pure = PurePosixPath(relative.replace(chr(92), "/"))
+        if (
+            not relative or pure.is_absolute() or PureWindowsPath(relative).is_absolute()
+            or ".." in pure.parts
+        ):
+            raise ConfigurationError("Invalid or unsafe output run reference")
+        candidate = (root / Path(*pure.parts)).resolve(strict=True)
+    else:
+        supplied = Path(reference)
+        if supplied.is_absolute() or PureWindowsPath(reference).is_absolute():
+            candidate = supplied.resolve(strict=True)
+        else:
+            direct = supplied.resolve(strict=False)
+            candidate = (
+                direct.resolve(strict=True)
+                if direct.exists()
+                else (root / supplied).resolve(strict=True)
+            )
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ConfigurationError("Selected report source is outside OUTPUT_ROOT") from exc
+    return load_run(candidate, label=reference, origin="output")
+
+
+def _regenerate_reports_command(settings: Settings, reference: str) -> int:
+    from .report_regeneration import regenerate_reports
+
+    sensitive_values = (settings.server, settings.username, settings.password)
+    snapshot = _load_output_run(reference, settings.output_root)
+    result = regenerate_reports(
+        snapshot,
+        settings.output_root,
+        sensitive_values=sensitive_values,
+    )
+    safe = {
+        name: redact_text(path, sensitive_values=sensitive_values)
+        for name, path in result.items()
+    }
+    print(json.dumps({
+        "status": "PASS",
+        "operation": "offline-report-regeneration",
+        "database_connection_attempted": False,
+        "canonical_source_mutated": False,
+        "source_run": redact_text(snapshot.root, sensitive_values=sensitive_values),
+        "outputs": safe,
+    }, indent=2))
+    return 0
 
 
 def _dry_run(settings: Settings) -> int:
@@ -77,6 +142,8 @@ def main(argv: list[str] | None = None) -> int:
             return _dry_run(settings)
         if args.command == "test-connection":
             return _test_connection(settings)
+        if args.command == "regenerate-reports":
+            return _regenerate_reports_command(settings, args.run)
         if args.command == "inventory":
             from .inventory import run_inventory
 
@@ -97,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
                 ],
             }, indent=2))
             return 0
-        if args.command in {"all", "report"}:
+        if args.command in {"all", "discover-and-report"}:
             from .fullrun import run_all
 
             roots = run_all(settings)

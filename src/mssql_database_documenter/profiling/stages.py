@@ -10,7 +10,7 @@ from ..runtime import object_key as _object_key, quote_identifier as _qid
 from ..runtime import write_csv as _csv, write_markdown as _md
 from . import (
     SENSITIVE_CATEGORIES, build_sample_plan, known_row_estimate as _known_row_estimate,
-    sample_failure_status, sanitize_sample_rows,
+    evaluate_view_sample_eligibility, sample_failure_status, sanitize_sample_rows,
     within_safety_threshold as _within_safety_threshold,
 )
 from .policy import (
@@ -143,7 +143,8 @@ class ProfilingStagesMixin:
         if not self.mode_policy.samples:
             _md(self.root / "14_Samples" / "README.md", "# Samples\n\nDisabled by configuration.")
             _csv(self.artifact("MASKING_REPORT.csv"), ("schema_name", "object_name", "object_type", "column_name", "category", "action", "confidence", "evidence"), [])
-            _csv(self.artifact("SAMPLE_INDEX.csv"), ("schema_name", "object_name", "object_type", "requested_rows", "returned_rows", "ordering_strategy", "status", "masked_sensitive_column_count"), [])
+            _csv(self.artifact("SAMPLE_INDEX.csv"), ("schema_name", "object_name", "object_type", "requested_rows", "returned_rows", "ordering_strategy", "status", "eligibility_reason", "eligibility_evidence", "masked_sensitive_column_count"), [])
+            self.data["sample_index"] = []
             return
         columns_by_object: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
         for column in self.data["columns"]:
@@ -161,11 +162,37 @@ class ProfilingStagesMixin:
         for prop in self.data.get("extended_properties", []):
             prop_key = (str(prop.get("schema_name") or ""), str(prop.get("object_name") or ""), str(prop.get("column_name") or ""))
             property_text[prop_key] = property_text.get(prop_key, "") + " " + str(prop.get("property_value") or "")
+        views_by_object = {
+            (
+                str(view.get("schema_name") or "").casefold(),
+                str(view.get("object_name") or "").casefold(),
+            ): view
+            for view in self.data.get("views", [])
+        }
+        dependency_discovery_complete = (
+            "dependencies" in self.data
+            and not any(
+                str(error.get("query_name") or "").casefold() == "dependencies"
+                for error in self.errors
+            )
+        )
         for (schema, obj, object_type), columns in sorted(columns_by_object.items()):
             key = f"{schema}.{obj}"
             headers = [str(col["column_name"]) for col in sorted(columns, key=lambda item: int(item["column_id"]))]
             primary_keys = [row for row in self.data.get("primary_keys", []) if row.get("schema_name") == schema and row.get("object_name") == obj]
             indexes = [row for row in self.data.get("indexes", []) if row.get("schema_name") == schema and row.get("object_name") == obj]
+            view_eligibility = None
+            if object_type.strip().upper() == "VIEW":
+                view_eligibility = evaluate_view_sample_eligibility(
+                    current_database=self.database,
+                    schema_name=schema,
+                    object_name=obj,
+                    view=views_by_object.get((schema.casefold(), obj.casefold())),
+                    dependencies=self.data.get("dependencies", ()),
+                    static_references=self.data.get("static_references", ()),
+                    synonyms=self.data.get("synonyms", ()),
+                    dependency_discovery_complete=dependency_discovery_complete,
+                )
             plan = build_sample_plan(
                 schema_name=schema, object_name=obj, object_type=object_type,
                 requested_rows=self.mode_policy.sample_row_limit,
@@ -174,6 +201,7 @@ class ProfilingStagesMixin:
                 estimated_rows=_known_row_estimate(sizes, key),
                 profile_large_table_threshold=self.mode_policy.profile_row_threshold,
                 primary_keys=primary_keys, indexes=indexes,
+                view_eligibility=view_eligibility,
             )
             raw_rows: list[dict[str, Any]] = []
             status = plan.status
@@ -216,13 +244,16 @@ class ProfilingStagesMixin:
                 "schema_name": schema, "object_name": obj, "object_type": object_type,
                 "requested_rows": plan.requested_rows, "returned_rows": len(safe_rows),
                 "ordering_strategy": plan.ordering_strategy, "status": status,
+                "eligibility_reason": plan.eligibility_reason,
+                "eligibility_evidence": plan.eligibility_evidence,
                 "masked_sensitive_column_count": sanitized.masked_sensitive_column_count,
             })
         self.data["masking"] = masking_rows
         self.data["sample_rows"] = sample_rows_by_object
         self.data["sample_sensitivity"] = sample_sensitivity
+        self.data["sample_index"] = sample_index
         _csv(self.artifact("MASKING_REPORT.csv"), ("schema_name", "object_name", "object_type", "column_name", "category", "action", "confidence", "evidence"), masking_rows)
-        _csv(self.artifact("SAMPLE_INDEX.csv"), ("schema_name", "object_name", "object_type", "requested_rows", "returned_rows", "ordering_strategy", "status", "masked_sensitive_column_count"), sample_index)
+        _csv(self.artifact("SAMPLE_INDEX.csv"), ("schema_name", "object_name", "object_type", "requested_rows", "returned_rows", "ordering_strategy", "status", "eligibility_reason", "eligibility_evidence", "masked_sensitive_column_count"), sample_index)
 
     def prompt07_profile(self) -> None:
         sizes = {_object_key(row): row for row in self.data.get("table_sizes", [])}

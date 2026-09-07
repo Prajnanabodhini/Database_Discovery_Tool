@@ -91,6 +91,14 @@ class ReportingStagesMixin:
         completed = [row["prompt"] for row in self.status if row["status"] == "PASS"]
         table_keys = {_object_key(row) for row in self.data.get("tables", [])}
         sampled = set(self.data.get("sample_rows", {}))
+        sample_status_counts: dict[str, int] = {}
+        for row in self.data.get("sample_index", []):
+            status = str(row.get("status") or "UNKNOWN")
+            sample_status_counts[status] = sample_status_counts.get(status, 0) + 1
+        sample_status_coverage = ", ".join(
+            f"{status}={count}"
+            for status, count in sorted(sample_status_counts.items())
+        ) or "NONE"
         profiled_tables = {_object_key(row) for row in self.data.get("column_profile", []) if row.get("profile_status") == "PROFILED"}
         lines = [
             "# Discovery Coverage", "", f"- Completed prompt stages: {', '.join(completed)}",
@@ -98,6 +106,7 @@ class ReportingStagesMixin:
             "## Object coverage", "",
             f"- Tables discovered: {len(table_keys)}", f"- Tables documented: {len(list((self.root / '20_Object_Documentation' / 'Tables').glob('*.md')))}",
             f"- Tables with at least one profiled column: {len(profiled_tables)}", f"- Tables/views with sample files attempted: {len(sampled)}",
+            f"- Sample status coverage: {sample_status_coverage}",
             f"- Columns discovered: {len(self.data.get('columns', []))}", f"- Column profile rows: {len(self.data.get('column_profile', []))}",
             f"- Programmable objects discovered: {sum(len(self.data.get(name, [])) for name in ('views', 'procedures', 'functions', 'triggers'))}",
             f"- Dependency/lineage edges: {len(self.data.get('lineage', []))}", f"- Relationship cardinality rows: {len(self.data.get('relationship_cardinality', []))}", "",

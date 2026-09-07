@@ -7,7 +7,10 @@ from unittest.mock import MagicMock
 from mssql_database_documenter.config import Settings
 from mssql_database_documenter.fullrun import SequentialRun
 from mssql_database_documenter.profiling.sampler import (
+    VIEW_SAMPLE_ALLOWED_STATUS,
+    VIEW_SAMPLE_DENIED_STATUS,
     build_sample_plan,
+    evaluate_view_sample_eligibility,
     sample_failure_status,
     sanitize_sample_rows,
 )
@@ -16,16 +19,200 @@ from mssql_database_documenter.safety import validate_read_only_sql
 
 
 class SamplerTests(unittest.TestCase):
+    @staticmethod
+    def eligibility(
+        *,
+        definition: str = "CREATE VIEW [reporting].[CurrentStudents] AS SELECT * FROM [dbo].[Student]",
+        view_updates: dict[str, object] | None = None,
+        dependencies=(),
+        static_references=(),
+        synonyms=(),
+        dependency_discovery_complete: bool = True,
+    ):
+        view = {
+            "schema_name": "reporting",
+            "object_name": "CurrentStudents",
+            "definition_available": True,
+            "definition_sanitized": definition,
+            "dynamic_sql_present": False,
+        }
+        view.update(view_updates or {})
+        return evaluate_view_sample_eligibility(
+            current_database="School",
+            schema_name="reporting",
+            object_name="CurrentStudents",
+            view=view,
+            dependencies=dependencies,
+            static_references=static_references,
+            synonyms=synonyms,
+            dependency_discovery_complete=dependency_discovery_complete,
+        )
+
     def test_view_without_size_estimate_has_bounded_unordered_plan(self) -> None:
+        eligibility = self.eligibility(
+            dependencies=({
+                "source_schema": "reporting", "source_object": "CurrentStudents",
+                "target_schema": "dbo", "target_object": "Student", "referenced_id": 42,
+            },),
+        )
         plan = build_sample_plan(
             schema_name="reporting", object_name="CurrentStudents", object_type="VIEW",
             requested_rows=7, sample_tables=True, sample_views=True,
             sample_large_tables=True, estimated_rows=None, profile_large_table_threshold=10,
+            view_eligibility=eligibility,
         )
         self.assertTrue(plan.enabled)
+        self.assertEqual(eligibility.status, VIEW_SAMPLE_ALLOWED_STATUS)
         self.assertEqual(plan.ordering_strategy, "UNORDERED_TOP_VIEW")
         self.assertEqual(plan.sql, "SELECT TOP (7) * FROM [reporting].[CurrentStudents]")
         validate_read_only_sql(plan.sql)
+
+    def test_view_plan_without_eligibility_evidence_fails_closed(self) -> None:
+        plan = build_sample_plan(
+            schema_name="reporting", object_name="CurrentStudents",
+            object_type="VIEW", requested_rows=7,
+            sample_tables=True, sample_views=True, sample_large_tables=True,
+            estimated_rows=None, profile_large_table_threshold=10,
+        )
+        self.assertFalse(plan.enabled)
+        self.assertEqual(plan.status, VIEW_SAMPLE_DENIED_STATUS)
+        self.assertEqual(plan.sql, "")
+        self.assertIn("VIEW_ELIGIBILITY_EVIDENCE_NOT_PROVIDED", plan.eligibility_reason)
+
+    def test_local_only_view_is_sample_eligible(self) -> None:
+        eligibility = self.eligibility(
+            dependencies=({
+                "source_schema": "reporting", "source_object": "CurrentStudents",
+                "target_schema": "dbo", "target_object": "Student", "referenced_id": 42,
+            },),
+        )
+        self.assertTrue(eligibility.allowed)
+        self.assertEqual(eligibility.status, VIEW_SAMPLE_ALLOWED_STATUS)
+        self.assertEqual(eligibility.reasons, ())
+
+    def test_current_database_three_part_view_reference_is_allowed(self) -> None:
+        eligibility = self.eligibility(
+            definition="CREATE VIEW reporting.CurrentStudents AS SELECT * FROM School.dbo.Student",
+            dependencies=({
+                "source_schema": "reporting", "source_object": "CurrentStudents",
+                "target_database": "School", "target_schema": "dbo",
+                "target_object": "Student", "referenced_id": "",
+            },),
+        )
+        self.assertTrue(eligibility.allowed)
+        self.assertEqual(eligibility.status, VIEW_SAMPLE_ALLOWED_STATUS)
+
+    def test_other_database_view_reference_is_denied(self) -> None:
+        eligibility = self.eligibility(
+            definition="CREATE VIEW reporting.CurrentStudents AS SELECT * FROM OtherDb.dbo.Student",
+            dependencies=({
+                "source_schema": "reporting", "source_object": "CurrentStudents",
+                "target_database": "OtherDb", "target_schema": "dbo",
+                "target_object": "Student", "referenced_id": "",
+            },),
+        )
+        self.assertFalse(eligibility.allowed)
+        self.assertEqual(eligibility.status, VIEW_SAMPLE_DENIED_STATUS)
+        self.assertIn("CROSS_DATABASE_DEPENDENCY", eligibility.reasons)
+
+    def test_linked_server_view_reference_is_denied(self) -> None:
+        eligibility = self.eligibility(
+            definition="CREATE VIEW reporting.CurrentStudents AS SELECT * FROM LinkedSrv.OtherDb.dbo.Student",
+            dependencies=({
+                "source_schema": "reporting", "source_object": "CurrentStudents",
+                "target_server": "LinkedSrv", "target_database": "OtherDb",
+                "target_schema": "dbo", "target_object": "Student",
+            },),
+        )
+        self.assertFalse(eligibility.allowed)
+        self.assertEqual(eligibility.status, VIEW_SAMPLE_DENIED_STATUS)
+        self.assertIn("LINKED_SERVER_DEPENDENCY", eligibility.reasons)
+
+    def assert_external_primitive_denied(self, primitive: str) -> None:
+        eligibility = self.eligibility(
+            definition=(
+                "CREATE VIEW reporting.CurrentStudents AS SELECT * FROM "
+                f"{primitive}(RemoteSource, 'SELECT StudentId FROM dbo.Student')"
+            ),
+        )
+        self.assertFalse(eligibility.allowed)
+        self.assertEqual(eligibility.status, VIEW_SAMPLE_DENIED_STATUS)
+        self.assertIn(f"EXTERNAL_QUERY_PRIMITIVE_{primitive}", eligibility.reasons)
+
+    def test_openquery_view_is_denied(self) -> None:
+        self.assert_external_primitive_denied("OPENQUERY")
+
+    def test_openrowset_view_is_denied(self) -> None:
+        self.assert_external_primitive_denied("OPENROWSET")
+
+    def test_opendatasource_view_is_denied(self) -> None:
+        self.assert_external_primitive_denied("OPENDATASOURCE")
+
+    def test_external_synonym_view_reference_is_denied(self) -> None:
+        eligibility = self.eligibility(
+            dependencies=({
+                "source_schema": "reporting", "source_object": "CurrentStudents",
+                "target_schema": "dbo", "target_object": "RemoteStudent",
+                "referenced_id": 55,
+            },),
+            synonyms=({
+                "schema_name": "dbo", "object_name": "RemoteStudent",
+                "base_object_name": "[LinkedSrv].[OtherDb].[dbo].[Student]",
+            },),
+        )
+        self.assertFalse(eligibility.allowed)
+        self.assertEqual(eligibility.status, VIEW_SAMPLE_DENIED_STATUS)
+        self.assertIn("EXTERNAL_SYNONYM_DEPENDENCY", eligibility.reasons)
+
+    def test_unavailable_encrypted_opaque_dynamic_and_unresolved_view_evidence_fails_closed(self) -> None:
+        cases = {
+            "unavailable": self.eligibility(
+                definition="",
+                view_updates={"definition_available": False},
+            ),
+            "encrypted": self.eligibility(
+                view_updates={"is_encrypted": True},
+            ),
+            "opaque": self.eligibility(
+                view_updates={"definition_opaque": True},
+            ),
+            "dynamic": self.eligibility(
+                view_updates={"dynamic_sql_present": True},
+            ),
+            "dependency_failure": self.eligibility(
+                dependency_discovery_complete=False,
+            ),
+            "unresolved": self.eligibility(
+                dependencies=({
+                    "source_schema": "reporting", "source_object": "CurrentStudents",
+                    "target_schema": "dbo", "target_object": "UnknownObject",
+                    "referenced_id": "",
+                },),
+            ),
+        }
+        for name, eligibility in cases.items():
+            with self.subTest(name=name):
+                self.assertFalse(eligibility.allowed)
+                self.assertEqual(eligibility.status, VIEW_SAMPLE_DENIED_STATUS)
+
+    def test_table_sampling_is_unaffected_without_view_evidence(self) -> None:
+        plan = build_sample_plan(
+            schema_name="dbo", object_name="Student", object_type="USER_TABLE",
+            requested_rows=5, sample_tables=True, sample_views=True,
+            sample_large_tables=True, estimated_rows=10,
+            profile_large_table_threshold=100,
+        )
+        self.assertTrue(plan.enabled)
+        self.assertEqual(plan.status, "READY")
+        validate_read_only_sql(plan.sql)
+
+    def test_view_gate_introduces_no_remote_connection_helper(self) -> None:
+        root = Path(__file__).parents[1] / "src" / "mssql_database_documenter"
+        sampler_source = (root / "profiling" / "sampler.py").read_text(encoding="utf-8").casefold()
+        stages_source = (root / "profiling" / "stages.py").read_text(encoding="utf-8").casefold()
+        self.assertNotIn("import pyodbc", sampler_source)
+        self.assertNotIn("from ..connection", sampler_source)
+        self.assertNotIn("from ..connection", stages_source)
 
     def test_large_table_sampling_is_independent_from_profile_threshold(self) -> None:
         plan = build_sample_plan(
@@ -107,6 +294,18 @@ class SamplerTests(unittest.TestCase):
                 "table_sizes": [{"schema_name": "dbo", "object_name": "Student", "row_count": 50_000}],
                 "primary_keys": [{"schema_name": "dbo", "object_name": "Student", "column_name": "StudentId", "key_ordinal": 1}],
                 "indexes": [], "extended_properties": [],
+                "views": [{
+                    "schema_name": "reporting", "object_name": "StudentView",
+                    "definition_available": True,
+                    "definition_sanitized": "CREATE VIEW reporting.StudentView AS SELECT EmailAddress FROM dbo.Student",
+                    "dynamic_sql_present": False,
+                }],
+                "dependencies": [{
+                    "source_schema": "reporting", "source_object": "StudentView",
+                    "target_schema": "dbo", "target_object": "Student",
+                    "referenced_id": 42,
+                }],
+                "static_references": [], "synonyms": [],
             }
 
             def rows_for(sql: str, **_kwargs):
@@ -147,6 +346,18 @@ class SamplerTests(unittest.TestCase):
             run.data = {
                 "columns": [{"schema_name": "reporting", "object_name": "SlowView", "object_type": "VIEW", "column_name": "StudNm", "column_id": 1, "data_type": "nvarchar"}],
                 "table_sizes": [], "primary_keys": [], "indexes": [], "extended_properties": [],
+                "views": [{
+                    "schema_name": "reporting", "object_name": "SlowView",
+                    "definition_available": True,
+                    "definition_sanitized": "CREATE VIEW reporting.SlowView AS SELECT StudNm FROM dbo.Student",
+                    "dynamic_sql_present": False,
+                }],
+                "dependencies": [{
+                    "source_schema": "reporting", "source_object": "SlowView",
+                    "target_schema": "dbo", "target_object": "Student",
+                    "referenced_id": 42,
+                }],
+                "static_references": [], "synonyms": [],
             }
             run.fetch_dynamic = MagicMock(side_effect=RuntimeError("HYT00 query timeout"))
             run.prompt08_samples()
@@ -155,6 +366,58 @@ class SamplerTests(unittest.TestCase):
             self.assertEqual(row["status"], "FAILED_TIMEOUT")
             self.assertEqual(row["returned_rows"], "0")
             self.assertEqual(row["object_type"], "VIEW")
+
+    def test_external_view_is_skipped_in_safe_and_full_modes_with_coverage(self) -> None:
+        for mode in ("safe-profile", "full-readonly"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                run = SequentialRun(
+                    Settings(
+                        server="sql01", databases=("School",),
+                        output_root=Path(directory) / "output",
+                        discovery_mode=mode, sample_tables=False, sample_views=True,
+                    ),
+                    "School",
+                )
+                run.data = {
+                    "columns": [{
+                        "schema_name": "reporting", "object_name": "ExternalView",
+                        "object_type": "VIEW", "column_name": "StudNm",
+                        "column_id": 1, "data_type": "nvarchar",
+                    }],
+                    "views": [{
+                        "schema_name": "reporting", "object_name": "ExternalView",
+                        "definition_available": True,
+                        "definition_sanitized": "CREATE VIEW reporting.ExternalView AS SELECT StudNm FROM OtherDb.dbo.Student",
+                        "dynamic_sql_present": False,
+                    }],
+                    "dependencies": [{
+                        "source_schema": "reporting", "source_object": "ExternalView",
+                        "target_database": "OtherDb", "target_schema": "dbo",
+                        "target_object": "Student", "referenced_id": "",
+                    }],
+                    "static_references": [], "synonyms": [],
+                    "table_sizes": [], "primary_keys": [], "indexes": [],
+                    "extended_properties": [],
+                }
+                run.fetch_dynamic = MagicMock(
+                    side_effect=AssertionError("external view queried"),
+                )
+                run.prompt08_samples()
+                run.fetch_dynamic.assert_not_called()
+                row = run.data["sample_index"][0]
+                self.assertEqual(row["status"], VIEW_SAMPLE_DENIED_STATUS)
+                self.assertIn("CROSS_DATABASE_DEPENDENCY", row["eligibility_reason"])
+                with run.artifact("SAMPLE_INDEX.csv").open(
+                    "r", encoding="utf-8-sig", newline="",
+                ) as handle:
+                    persisted = next(csv.DictReader(handle))
+                self.assertEqual(persisted["status"], VIEW_SAMPLE_DENIED_STATUS)
+                self.assertEqual(persisted["returned_rows"], "0")
+                run._write_control_files(final=False)
+                coverage = run.artifact("DISCOVERY_COVERAGE.md").read_text(
+                    encoding="utf-8",
+                )
+                self.assertIn(f"{VIEW_SAMPLE_DENIED_STATUS}=1", coverage)
 
     def test_large_table_remains_excluded_from_deep_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

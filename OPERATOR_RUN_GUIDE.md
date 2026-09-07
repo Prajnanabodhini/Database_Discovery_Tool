@@ -25,25 +25,26 @@ The browser opens `http://127.0.0.1:8765/` by default. The application rejects a
 non-loopback `WEB_HOST`; do not expose it to a network interface without a separate
 security review.
 
-## Current validation status
+## Current v3.1.1 validation status
 
-Fresh Prompt 14 validation completed on 2026-09-07 for both configured databases.
-Dry-run, connection, metadata, metadata+logic, safe-profile, independent masking
-audit, explicit exclude-samples Git export, and three-run comparison gates passed.
-The repaired DB1 classification sequence now persists masked extrema and passes its
-independent audit. Each safe-profile run records one object-level warning because the
-existing view `dbo.feespegv` has a SQL Server binding error; the view was skipped while
-all other stages continued truthfully.
+Fresh Prompts 12–14 validation completed on 2026-09-07 for both configured
+databases. Dry-run, connection, metadata, metadata+logic, safe-profile,
+independent masking audit, explicit exclude-samples Git export, offline report
+regeneration, and real two/three-run comparison gates passed. Each
+safe-profile run records one contained object-level warning for an inaccessible
+view; the object was skipped while all stages continued truthfully.
 
 The old failed output `20260906_150848` remains unsafe local diagnostic evidence;
 never edit, share, or export it. Full-readonly was not separately authorized during
 the remediation validation and was not rerun.
 
-Prompt 15 subsequently re-audited all project-owned files, offline gates, named
-security regressions, and authorized live evidence. There are no unresolved P0/P1/P2:
-**MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE.** This means the reviewed source
-and evidence are ready for an explicit version-control/release freeze; it does not
-mean a commit, tag, deployment, or production maintenance window was created.
+A post-freeze audit found and repaired an initial discovery run-root junction
+escape. The candidate rejects database-parent reparse points before inventory
+or full discovery can create evidence outside `OUTPUT_ROOT`. Its local gates
+and Windows/Python 3.11 GitHub Actions run `34141997707` pass:
+**MSSQL DOCUMENTATION TOOL v3.1.1 — READY TO FREEZE.** No tag, release,
+deployment, database change, or production maintenance window has been
+created.
 
 ## Offline developer self-test
 
@@ -157,6 +158,24 @@ file before and after generation and creates a new destination for every request
 If the stored evidence is stale or incomplete, perform a new approved discovery
 instead. A regenerated report is a presentation copy, not a sanitized Git export;
 the separate Git-export safety review still applies to canonical runs.
+
+The equivalent console action is:
+
+```powershell
+.\.venv\Scripts\python.exe main.py regenerate-reports --run "output:School/run_20260907_120000"
+```
+
+You may also supply the contained path of the manifested run. This command is
+offline and presentation-only. By contrast, these commands connect to MSSQL and
+create a new discovery run with its normal reports:
+
+```powershell
+.\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env --mode safe-profile all
+.\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env --mode safe-profile discover-and-report
+```
+
+The former `report` command is no longer accepted because its name did not reveal
+that it started a live database discovery.
 
 ## Stop and recovery
 

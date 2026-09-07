@@ -1,5 +1,8 @@
 # SchoolERP MSSQL Documenter v3.1 - Final Fine-Comb File Audit
 
+> **Historical v3.1 audit record.** Retained for provenance and superseded as
+> current release authority by `V3_1_1_HARDENING_REPORT.md`.
+
 ## Current decision - 2026-09-07 Prompt 15 rerun
 
 **MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE.**

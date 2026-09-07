@@ -13,9 +13,14 @@ from .sensitivity import (
     mask_value,
 )
 from .sampler import (
+    EXTERNAL_VIEW_PRIMITIVES,
     SamplePlan,
     SanitizedSample,
+    VIEW_SAMPLE_ALLOWED_STATUS,
+    VIEW_SAMPLE_DENIED_STATUS,
+    ViewSampleEligibility,
     build_sample_plan,
+    evaluate_view_sample_eligibility,
     sample_failure_status,
     sanitize_sample_rows,
 )
@@ -44,8 +49,11 @@ def within_safety_threshold(
 
 
 __all__ = (
-    "SENSITIVE_CATEGORIES", "SensitivityResult", "SensitivityRule", "classify_sensitivity",
-    "SamplePlan", "SanitizedSample", "build_sample_plan", "known_row_estimate",
+    "EXTERNAL_VIEW_PRIMITIVES", "SENSITIVE_CATEGORIES", "SensitivityResult",
+    "SensitivityRule", "VIEW_SAMPLE_ALLOWED_STATUS", "VIEW_SAMPLE_DENIED_STATUS",
+    "ViewSampleEligibility", "classify_sensitivity",
+    "SamplePlan", "SanitizedSample", "build_sample_plan",
+    "evaluate_view_sample_eligibility", "known_row_estimate",
     "load_sensitivity_overrides", "mask_value", "sample_failure_status",
     "sanitize_sample_rows",
     "within_safety_threshold",

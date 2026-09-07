@@ -4,20 +4,24 @@ A generic, strictly read-only SQL Server discovery and documentation engine with
 
 The v3 interface preserves the v2 discovery engine and evidence contract. It adds presentation and orchestration; it does not add arbitrary SQL, shell execution, stored-program execution, or database mutation.
 
-## Current v3.1 validation status
+## Current v3.1.1 freeze status
 
-**MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE.** Fresh ordered
-metadata, metadata+logic, and safe-profile runs completed for both configured
-databases on 2026-09-07 using release `0.3.1`. Both safe-profile masking audits and
-independent re-audits passed with zero violations, including the DB1 column that
-triggered the earlier containment failure. Explicit Git exports use the default
-`exclude` policy, contain no sample payload CSVs or configured identity/credential
-strings, and pass checksum verification. A three-run DB1 comparison and static HTML
-export also passed. Each safe-profile run truthfully retains one non-fatal warning for
-an existing broken view. The failed historical run remains local-only and unchanged.
-Prompt 15 re-audited all 183 project-owned files, all named regression classes, the
-offline quality gate, and the authorized live evidence with no unresolved P0/P1/P2.
-This readiness declaration does not create a Git commit, tag, release, or deployment.
+**MSSQL DOCUMENTATION TOOL v3.1.1 — READY TO FREEZE.** The repaired candidate
+passes 192 offline tests, 2 platform-privilege skips, and 251 subtests,
+including direct inventory and full-run database-parent junction regressions.
+Windows/Python 3.11 GitHub Actions run `34141997707` is green for candidate
+implementation commit
+`1dc8825c2445342e44ee59ca609770284ffd8d3b`.
+
+Fresh ordered metadata, metadata+logic, and safe-profile runs passed for both
+configured databases on 2026-09-07 using package version `0.3.1`. Both
+independent evidence audits, privacy-safe Git exports, offline report
+regeneration, and real two/three-run comparison exports passed. Each
+safe-profile run truthfully retains one contained warning for an inaccessible
+view. No unresolved P0, P1, or P2 finding remains.
+
+This readiness declaration covers the reviewed source and evidence. It does not
+create a Git commit, tag, release, deployment, or production maintenance window.
 
 ## Install
 
@@ -59,12 +63,21 @@ Never expose the dashboard to a network interface without a separate security re
 
 ## Safe console commands
 
+These commands start a new live read-only discovery and generate that run's normal reports:
+
 ```powershell
 .\.venv\Scripts\python.exe main.py test-connection
 .\.venv\Scripts\python.exe main.py cli --mode metadata
 .\.venv\Scripts\python.exe main.py cli --mode metadata+logic
 .\.venv\Scripts\python.exe main.py cli --mode safe-profile
 .\.venv\Scripts\python.exe main.py cli --mode full-readonly
+```
+
+To regenerate only the presentation for an existing manifested run, use the
+separate offline command. It does not connect to MSSQL or modify the selected run:
+
+```powershell
+.\.venv\Scripts\python.exe main.py regenerate-reports --run "output:School/run_20260907_120000"
 ```
 
 Use `--database "Configured Name"` after the mode to select one database from the configured allowlist. `run_metadata.bat` is the metadata-mode shortcut.
@@ -104,7 +117,13 @@ The legacy staged module CLI remains supported:
 .\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env test-connection
 .\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env inventory
 .\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env --mode full-readonly all
+.\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env --mode full-readonly discover-and-report
+.\.venv\Scripts\python.exe -m mssql_database_documenter --env-file .env regenerate-reports --run "output:School/run_20260907_120000"
 ```
+
+`all` and `discover-and-report` both perform a new live read-only discovery.
+`regenerate-reports` is the offline selected-run operation. The ambiguous legacy
+`report` command is intentionally not accepted.
 
 ## Sensitive-evidence safety note
 
@@ -127,6 +146,9 @@ rejects unsafe evidence.
   before and after, and never overwrites the source or an earlier regeneration.
 - Comparison results stay in memory unless **Compare and export** is selected.
 - A Git export is created only through the explicit Git-export action and is rescanned for configured sensitive values before copying.
+- Local output is canonical working evidence and can retain policy-approved profile extrema or distribution labels. It is not automatically safe to publish.
+- Git export applies the separate `GIT_EXPORT_PROFILE_VALUE_POLICY`. The secure default, `mask_unknown_text`, pseudonymizes unknown textual profile values and redacts binary values in the staged copy; `aggregate_only` withholds extrema and distribution labels while retaining counts and aggregate metrics. A `raw` profile-value policy is not supported.
+- Git-export masking is a conservative publication boundary, not proof that every local value has been semantically de-identified. Review `99_Git_Handoff/GIT_EXPORT_POLICY.json`, the independent audit result, and checksums before committing an export.
 - Existing historical `output/` and `git_export/` evidence is never treated as source scaffold or silently replaced.
 
 ## Dashboard capabilities

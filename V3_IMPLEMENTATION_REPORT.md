@@ -1,5 +1,8 @@
 # v3 Master Prompt Implementation Report
 
+> **Historical v3/v3.1 implementation record.** Retained for provenance and
+> superseded as current release authority by `V3_1_1_HARDENING_REPORT.md`.
+
 ## 2026-09-07 v3.1 remediation addendum
 
 The v3.1 remediation remains an in-place repair of this application, not a rebuild.

@@ -178,6 +178,7 @@ def git_export():
                 git_export_root=settings.git_export_root,
                 sensitive_values=(settings.server, settings.username, settings.password),
                 sample_policy=settings.git_export_sample_policy,
+                profile_value_policy=settings.git_export_profile_value_policy,
             )
             return {"git_export": str(destination), "warning_count": 0}
         job = _jobs().start("git-export", snapshot.database, str(snapshot.summary.get("mode") or "UNKNOWN"), target)
