@@ -1,5 +1,8 @@
 # v3 Fine-Comb Final File Audit
 
+> **Historical v3 audit record.** Retained for provenance and superseded as
+> current release authority by `V3_1_1_HARDENING_REPORT.md`.
+
 ## 2026-08-31 remediation addendum
 
 The original audit result was superseded by a live end-to-end finding: sensitive

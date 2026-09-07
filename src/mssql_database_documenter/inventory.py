@@ -17,6 +17,12 @@ from .config import Settings
 from .metadata.support import FEATURE_SUPPORT_HEADERS, feature_support_markdown, is_unsupported_metadata_error, support_record
 from .mode_policy import resolve_mode_policy
 from .connection import connect
+from .path_safety import (
+    UnsafeDestinationError,
+    ensure_contained_directory,
+    is_reparse_point,
+    path_exists_no_follow,
+)
 from .queries import METADATA_QUERIES, SECURITY_METADATA_QUERIES, QuerySpec
 from .redaction import redact_text
 from .safety import ReadOnlyCursor, validate_read_only_sql
@@ -52,16 +58,31 @@ def safe_path_component(value: str) -> str:
 
 def _new_run_directory(output_root: Path, database: str) -> tuple[str, Path]:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    base = output_root / safe_path_component(database)
-    candidate = base / f"run_{timestamp}"
-    suffix = 1
-    while candidate.exists():
-        candidate = base / f"run_{timestamp}_{suffix:02d}"
-        suffix += 1
-    # Reserve only the truthful run root. Evidence subfolders are created by
-    # their writers when and only when the corresponding stage produces them.
-    candidate.mkdir(parents=True, exist_ok=False)
-    return candidate.name.removeprefix("run_"), candidate
+    database_component = safe_path_component(database)
+    base = ensure_contained_directory(output_root, (database_component,))
+    suffix = 0
+    while True:
+        leaf = f"run_{timestamp}" if suffix == 0 else f"run_{timestamp}_{suffix:02d}"
+        candidate = base / leaf
+        if path_exists_no_follow(candidate):
+            suffix += 1
+            continue
+        try:
+            candidate.mkdir(exist_ok=False)
+        except FileExistsError:
+            # A concurrent creator won this name. Revalidate the parent and
+            # reserve the next contained name without following the new entry.
+            base = ensure_contained_directory(output_root, (database_component,))
+            suffix += 1
+            continue
+        if is_reparse_point(candidate):
+            raise UnsafeDestinationError("New run directory became a link or reparse point")
+        resolved = ensure_contained_directory(
+            output_root, (database_component, leaf), create=False,
+        )
+        # Reserve only the truthful run root. Evidence subfolders are created
+        # by their writers when the corresponding stage produces them.
+        return leaf.removeprefix("run_"), resolved
 
 
 def _write_csv(path: Path, columns: Iterable[str], rows: list[dict[str, object]]) -> None:

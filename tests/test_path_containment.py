@@ -7,7 +7,10 @@ import tempfile
 import pytest
 
 from mssql_database_documenter.comparison import export_comparison, load_run
+from mssql_database_documenter.config import Settings
+from mssql_database_documenter.fullrun import SequentialRun
 from mssql_database_documenter.git_export import GitExportError, create_git_export
+from mssql_database_documenter.inventory import _new_run_directory
 from mssql_database_documenter.path_safety import (
     UnsafeDestinationError,
     ensure_contained_directory,
@@ -67,6 +70,35 @@ def test_shared_guard_rejects_real_reparse_point_before_descending() -> None:
 
         with pytest.raises(UnsafeDestinationError, match="reparse point"):
             ensure_contained_directory(root, ("nested", "must-not-be-created"))
+
+        assert list(outside.iterdir()) == []
+
+
+def test_initial_run_root_rejects_database_parent_reparse_without_external_write() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        base = Path(directory)
+        output_root = base / "output"
+        outside = base / "outside"
+        _directory_link(output_root / "School", outside)
+
+        with pytest.raises(UnsafeDestinationError, match="reparse point"):
+            _new_run_directory(output_root, "School")
+
+        assert list(outside.iterdir()) == []
+
+
+def test_sequential_run_rejects_database_parent_reparse_without_external_write() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        base = Path(directory)
+        output_root = base / "output"
+        outside = base / "outside"
+        _directory_link(output_root / "School", outside)
+
+        with pytest.raises(UnsafeDestinationError, match="reparse point"):
+            SequentialRun(
+                Settings(output_root=output_root, databases=("School",)),
+                "School",
+            )
 
         assert list(outside.iterdir()) == []
 

@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -47,6 +48,19 @@ class InventoryTests(unittest.TestCase):
             run.prompt02_safety()
             created = {item.name for item in run.root.iterdir() if item.is_dir()}
             self.assertEqual(created, {"00_Run_Metadata"})
+
+    def test_new_run_collision_preserves_first_01_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fixed = datetime(2026, 9, 7, 12, 0, 0, tzinfo=timezone.utc)
+            with patch("mssql_database_documenter.inventory.datetime") as clock:
+                clock.now.return_value = fixed
+                first_id, first = _new_run_directory(Path(temp_dir), "School")
+                second_id, second = _new_run_directory(Path(temp_dir), "School")
+
+            self.assertEqual(first_id, "20260907_120000")
+            self.assertEqual(second_id, "20260907_120000_01")
+            self.assertTrue(first.is_dir())
+            self.assertTrue(second.is_dir())
 
     def test_inventory_manifest_truthfully_resolves_metadata_policy(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

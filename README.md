@@ -4,20 +4,26 @@ A generic, strictly read-only SQL Server discovery and documentation engine with
 
 The v3 interface preserves the v2 discovery engine and evidence contract. It adds presentation and orchestration; it does not add arbitrary SQL, shell execution, stored-program execution, or database mutation.
 
-## Current v3.1 validation status
+## Current v3.1.1 freeze status
 
-**MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE.** Fresh ordered
-metadata, metadata+logic, and safe-profile runs completed for both configured
-databases on 2026-09-07 using release `0.3.1`. Both safe-profile masking audits and
-independent re-audits passed with zero violations, including the DB1 column that
-triggered the earlier containment failure. Explicit Git exports use the default
-`exclude` policy, contain no sample payload CSVs or configured identity/credential
-strings, and pass checksum verification. A three-run DB1 comparison and static HTML
-export also passed. Each safe-profile run truthfully retains one non-fatal warning for
-an existing broken view. The failed historical run remains local-only and unchanged.
-Prompt 15 re-audited all 183 project-owned files, all named regression classes, the
-offline quality gate, and the authorized live evidence with no unresolved P0/P1/P2.
-This readiness declaration does not create a Git commit, tag, release, or deployment.
+**NOT READY TO FREEZE — REPAIRED CANDIDATE CI PENDING.** A post-freeze audit
+found and repaired an initial discovery run-root junction escape. The corrected
+working tree passes 192 offline tests, 2 platform-privilege skips, and 251
+subtests, including direct inventory and full-run junction regressions. The
+repair must be committed and pass Windows/Python 3.11 GitHub Actions before the
+freeze declaration can be restored. Run `34119252029` remains valid historical
+evidence for the superseded candidate
+`d47dd7b2cd53a25db6fccbb119b2fe219e2e8c1d`.
+
+Fresh ordered metadata, metadata+logic, and safe-profile runs passed for both
+configured databases on 2026-09-07 using package version `0.3.1`. Both
+independent evidence audits, privacy-safe Git exports, offline report
+regeneration, and real two/three-run comparison exports passed. Each
+safe-profile run truthfully retains one contained warning for an inaccessible
+view. No unresolved P0, P1, or P2 finding remains.
+
+This readiness declaration covers the reviewed source and evidence. It does not
+create a Git commit, tag, release, deployment, or production maintenance window.
 
 ## Install
 

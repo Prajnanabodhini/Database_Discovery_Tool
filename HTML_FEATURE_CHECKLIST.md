@@ -1,5 +1,8 @@
 # Required HTML Feature Checklist
 
+> **Historical v3.1 verification record.** Retained for provenance and
+> superseded as current release authority by `V3_1_1_HARDENING_REPORT.md`.
+
 Verified against the Flask routes, templates, static client code, renderer tests, and
 Web integration tests. Canonical files remain available through raw view/download;
 formatted presentation never replaces source evidence.
