@@ -60,7 +60,7 @@ The review confirmed the protected v3.1 safety baseline: read-only connection in
 | 08 | COMPLETE | `lineage/stages.py`, `Prompts/README.md`, report | Compile/import PASS; 11 focused tests passed | Duplicate decorator removed with no behavior change; every top-level prompt generation is classified by authority and supersession status. |
 | 09 | COMPLETE | `tests/test_sampler.py`, report | 163 passed, 2 skipped, 228 subtests passed | All v3.1.1 findings and protected v3.1 guarantees map to permanent behavioral regressions; encrypted and opaque view cases are now explicit. |
 | 10 | COMPLETE | Report only | 110 passed, 2 skipped, 40 subtests; self-test 189 passed, 2 skipped, 251 subtests | Read-only SQL, Web controls, evidence transformations, containment, sanitization, and clean-directory laziness re-audited; no P0/P1 found. |
-| 11 | IN PROGRESS — LOCAL PASS / CI PENDING | Report only | Compile/import PASS; 189 passed, 2 skipped, 251 subtests; self-test PASS; dry-run 35 SAFE | Local clean-start gate passed; completion is blocked on an approved commit/push and green Windows/Python 3.11 GitHub Actions run for the current changes. |
+| 11 | COMPLETE — CI GREEN | Report only | Compile/import PASS; 189 passed, 2 skipped, 251 subtests; self-test PASS; dry-run 35 SAFE; CI PASS | Clean local gate and Windows/Python 3.11 GitHub Actions run `34118948155` passed for implementation commit `37cf80a0d28f4fef32101fd74693607469e06103`. |
 | 12 | NOT AUTHORIZED | None | Not run | DB1; blocked by offline, CI, and operator gates. |
 | 13 | NOT AUTHORIZED | None | Not run | DB2; also requires DB1 PASS. |
 | 14 | NOT AUTHORIZED | None | Not run | Export/regeneration/comparison smoke. |
@@ -570,9 +570,8 @@ Git-ignored and were not added to the working tree.
 
 ## Offline regression and GitHub Actions
 
-Prompt 11 local acceptance is complete, but the prompt is not yet PASS because
-the current accumulated hardening changes have not received approval to be
-committed and pushed for their mandatory GitHub Actions run.
+Prompt 11 is complete. The clean local acceptance gate and the mandatory
+Windows/Python 3.11 GitHub Actions gate both passed.
 
 Clean-start handling:
 
@@ -607,15 +606,15 @@ Local command results using the repository Python 3.13.14 virtual environment:
 CI gate:
 
 - Current branch: `v3.1.1-hardening`.
-- Last committed SHA: `e3041accb980e8db9af39ad968cdac5422328daa`.
-- Current Prompt 04–10 hardening changes: not committed or pushed.
-- Workflow run ID/URL/conclusion for current changes: pending.
-- Gate decision: **LOCAL PASS / CI PENDING — PROMPT 11 INCOMPLETE**.
-- Required next action: obtain explicit approval to stage, commit, and push the
-  accumulated hardening changes, then monitor Windows/Python 3.11 GitHub
-  Actions to a green conclusion.
-- Prompt 12 is **not safe to start** until this CI gate passes. Live validation
-  remains unauthorized.
+- CI-validated implementation commit:
+  `37cf80a0d28f4fef32101fd74693607469e06103`.
+- Workflow: `Offline developer quality gate`, run `34118948155`,
+  <https://github.com/Prajnanabodhini/Database_Discovery_Tool/actions/runs/34118948155>.
+- Job: `Windows / Python 3.11 / offline` on `windows-latest`.
+- Status/conclusion: `completed / success`.
+- Gate decision: **PASS — PROMPT 11 COMPLETE**.
+- Prompt 12 is safe to start only with explicit live-DB1 authorization. No live
+  validation was started by Prompt 11.
 
 ## Live validation
 
@@ -623,7 +622,7 @@ Not authorized or started.
 
 ## Final changed-file list
 
-Not final. Through the local portion of Prompt 11, hardening has changed
+Not final. Through Prompt 11, hardening has changed
 `tests/test_runtime_self_test.py`, `tests/test_web_app.py`,
 `src/mssql_database_documenter/profiling/sampler.py`,
 `src/mssql_database_documenter/profiling/__init__.py`,
@@ -643,8 +642,8 @@ Prompt 07 additionally changes `src/mssql_database_documenter/inventory.py` and
 `src/mssql_database_documenter/lineage/stages.py` and adds `Prompts/README.md`.
 Prompt 09 further extends `tests/test_sampler.py` with explicit encrypted and
 opaque view regression inputs; it changes no production file. Prompt 10 changes
-only this report. Prompt 11's local gate also changes only this report; its
-commit/push and CI evidence remain pending.
+only this report. Prompt 11 changes only this report and records the green CI
+evidence for the committed implementation.
 
 ## Residual limitations
 
