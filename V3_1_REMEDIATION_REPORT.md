@@ -1575,3 +1575,158 @@ not begin without explicit live authorization.
 - console-script help: PASS;
 - final complete suite: **159 passed, 2 skipped, 241 subtests**;
 - exact output and Git-export inventory fingerprints remained unchanged.
+
+## Prompt 14 rerun - Live Read-Only Validation
+
+Status: **PASS WITH DOCUMENTED OBJECT-LEVEL ACCESS LIMITATIONS**
+
+Recorded: 2026-09-07
+Authorization: explicit user authorization received before live access
+
+Execution was strictly sequential. DB2 did not begin until every DB1 gate and
+independent evidence inspection passed. Git export did not begin until both generated
+and independent masking audits passed. Full-readonly was not separately authorized
+and was not run. The failed historical run `20260906_150848` was neither edited nor
+used as comparison/export input.
+
+### DB1 - Chikhali SchoolERP
+
+| Gate | Result |
+|---|---|
+| Registered-query dry-run | PASS; 35 queries SAFE; no connection; metadata policy permits no data scans |
+| Read-only connection/capabilities | PASS; three guarded queries; server/login sanitized or redacted |
+| Metadata `20260907_014959` | COMPLETED; `0.3.1`; 14 PASS / 6 SKIPPED_BY_MODE; 0 errors/warnings; audit PASS; 158 checksums valid |
+| Metadata+logic `20260907_015059` | COMPLETED; `0.3.1`; 17 PASS / 3 SKIPPED_BY_MODE; 0 errors/warnings; audit PASS; 985 checksums valid |
+| Safe-profile `20260907_015218` | COMPLETED_WITH_WARNINGS; `0.3.1`; 20/20 PASS; 0 errors, 1 warning; generated and independent audits PASS with 0 violations; 1,059 checksums valid |
+| Explicit Git export | `git_export/MSSQL/Chikhali SchoolERP/run_20260907_015218`; policy `exclude`; 0 sample payload CSVs; 0 configured identity/credential hits; independent audit PASS; 986 checksums valid |
+
+Safe-profile inspection:
+
+- 62 user tables sampled, 10 empty; 2 views attempted, 1 sampled and 1 inaccessible;
+- inaccessible view `dbo.feespegv` has an existing invalid-column/binding error;
+  impact is limited to that object's sample and continuation is recorded explicitly;
+- no table exceeded the 1,000,000-row profile threshold, so no live skipped-large
+  branch was applicable;
+- 795 profile rows, 3,818 low-cardinality rows, 806 masking rows, and 74 bounded local
+  sample payloads were produced;
+- sensitivity catalogue: Credential 3, Financial 15, PII 132, Potentially Sensitive
+  12, Unknown 644;
+- former failing identity `dbo.FeeMstStudent.outwardno` is final PII /
+  PSEUDONYMIZE / HIGH and both profile extrema are empty or valid masked tokens;
+- 4 sanitized SQL Agent references were retained; new feature-state evidence reports
+  PRESENT 5, ABSENT 8, DISABLED 1.
+
+### DB2 - Shirgaon SchoolERP
+
+| Gate | Result |
+|---|---|
+| Registered-query dry-run | PASS; 35 queries SAFE; no connection; metadata policy permits no data scans |
+| Read-only connection/capabilities | PASS; three guarded queries; server/login sanitized or redacted |
+| Metadata `20260907_015651` | COMPLETED; `0.3.1`; 14 PASS / 6 SKIPPED_BY_MODE; 0 errors/warnings; audit PASS; 269 checksums valid |
+| Metadata+logic `20260907_015735` | COMPLETED; `0.3.1`; 17 PASS / 3 SKIPPED_BY_MODE; 0 errors/warnings; audit PASS; 1,101 checksums valid |
+| Safe-profile `20260907_015839` | COMPLETED_WITH_WARNINGS; `0.3.1`; 20/20 PASS; 0 errors, 1 warning; generated and independent audits PASS with 0 violations; 1,286 checksums valid |
+| Explicit Git export | `git_export/MSSQL/Shirgaon SchoolERP/run_20260907_015839`; policy `exclude`; 0 sample payload CSVs; 0 configured identity/credential hits; independent audit PASS; 1,102 checksums valid |
+
+Safe-profile inspection:
+
+- 105 user tables sampled, 78 empty; 2 views attempted, 1 sampled and 1 inaccessible;
+- the inaccessible view is the same truthfully recorded `dbo.feespegv` binding error;
+- no table exceeded the 1,000,000-row profile threshold;
+- 2,078 profile rows, 6,105 low-cardinality rows, 2,089 masking rows, and 185 bounded
+  local sample payloads were produced;
+- sensitivity catalogue: Credential 2, Financial 44, Health 1, PII 205, Potentially
+  Sensitive 35, Unknown 1,802;
+- generated and independent audits found no raw value requiring masking under the
+  final catalogue;
+- 4 sanitized SQL Agent references were retained; new feature-state evidence reports
+  PRESENT 5, ABSENT 8, DISABLED 1.
+
+### Three-run comparison and static presentation
+
+Compatible same-database `0.3.1` runs were selected in chronological mode order:
+
+- A: DB1 metadata `20260907_014959`;
+- B: DB1 metadata+logic `20260907_015059`;
+- C: DB1 safe-profile `20260907_015218`.
+
+The production comparison completed across 44 categories and 13,147 rows. Because the
+modes intentionally differ, it correctly warns that unavailable evidence may not be
+comparable. All status filters executed: ADDED 10,896; CHANGED_ONLY 7; REMOVED 0;
+UNCHANGED 11,880; NOT_COMPARABLE 0. Two rows carry multiple timeline events, proving
+the multi-event path with real evidence.
+
+Explicit static HTML/CSV/JSON output was created at
+`output/comparisons/compare_20260907_020748_003358/`. The HTML source contains no
+script tag and includes complete run metadata and global/category summaries. The
+application's local `/file` route returned HTTP 200; after removing the surrounding
+application-shell scripts, the report remained fully readable with run metadata and
+global summary intact. Interactive visual browser control was not available in this
+session, so no visual-browser claim is made.
+
+Two comparison harness assertions were corrected before acceptance: one mixed an
+absolute export path with a relative configured root; another assumed the wrong report
+heading. Neither was a product failure, and no duplicate export was created after the
+valid comparison directory existed.
+
+### Prompt 14 disposition
+
+- DB1: PASS with one documented object-level view limitation.
+- DB2: PASS with one documented object-level view limitation.
+- New safe-profile Git exports: PASS, exclude-samples policy verified.
+- Three-run comparison/static presentation: PASS; interactive visual browser not
+  available and not claimed.
+- Full-readonly: NOT RUN; no separate authorization.
+- Unresolved live masking/containment P1: none.
+
+Prompt 14 is complete. Per the sequential remediation pack, Prompt 15 final fine-comb
+and freeze review has not started and requires a separate instruction.
+
+## Prompt 15 rerun - Final Fine-Comb Audit and v3.1 Freeze
+
+Status: **PASS**
+
+Recorded: 2026-09-07
+
+All 183 current project-owned files were re-audited using the existing exhaustive
+per-file matrices plus a current-tree delta review. Coverage includes 52 production
+Python files, 13 Web assets, 25 tests, 7 configuration/packaging/CI files, 14 root
+launch/report/audit/documentation files, and 72 prompt/specification files. Runtime
+evidence, Git exports, `.env`, `.venv`, caches, bytecode, build output, and `.git` are
+environment/generated state and were not misclassified as project source.
+
+Evidence:
+
+- remediation pack: 20/20 checksum entries valid;
+- configured-value source scan: zero configured server/user/password hits outside
+  excluded runtime/private roots;
+- required README, operator guide, safety model, Help, checklist, remediation report,
+  and final audit: present and non-empty;
+- lifecycle, SQL/cursor, discovered code, Agent, subprocess, secret/sample, report
+  semantics, HTML, mode, modularity, runtime pytest, metadata, 2/3-run, filter, CI, and
+  containment searches: PASS;
+- Python 3.13.14 and `pip check`: PASS;
+- project/package/distribution version: `0.3.1`;
+- compile/import/`create_app`/launcher help/non-connecting 35-query dry-run: PASS;
+- explicit self-test: **159 passed, 2 skipped, 241 subtests**;
+- independent offline suite: **159 passed, 2 skipped, 241 subtests**;
+- output and Git-export inventory fingerprints unchanged during the offline gate;
+- Prompt 14 DB1/DB2 safe-profile audits, independent re-audits, Git exports,
+  checksums, and A/B/C comparison: PASS as recorded above.
+
+Accepted limitations are not hidden: both safe-profile runs record one object-level
+sample warning for the database-owned broken view `dbo.feespegv`; interactive visual
+browser control was unavailable, while the real local file route and script-independent
+report contract passed; full-readonly was not separately authorized and was not rerun.
+None is an unresolved source P0/P1/P2 or invalidates the authorized live safety gate.
+
+Final disposition:
+
+- unresolved P0: **0**;
+- unresolved P1: **0**;
+- unresolved P2: **0**;
+- offline gate: **PASS**;
+- authorized live gate: **PASS WITH DOCUMENTED OBJECT-LEVEL LIMITATIONS**;
+- required documentation: **PASS**;
+- Git commit/tag/release/deployment: not requested and not performed.
+
+**MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE**

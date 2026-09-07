@@ -6,15 +6,18 @@ The v3 interface preserves the v2 discovery engine and evidence contract. It add
 
 ## Current v3.1 validation status
 
-**Offline repair complete; live revalidation pending.** The authorized 2026-09-06
-DB1 safe-profile run failed closed when later sample analysis upgraded one column to
-PII after an earlier profile extremum had already been persisted without masking.
-The pipeline now reconciles the final strongest classification back into profile and
-low-cardinality evidence and re-masks those values before the final audit. A regression
-recreates that sequence, the full offline suite passes, and package/runtime evidence
-uses release identity `0.3.1`. The failed historical run remains local diagnostic
-evidence and must not be edited, shared, or exported. A fresh ordered DB1 live run is
-still required before DB2, comparison smoke, or a freeze declaration.
+**MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE.** Fresh ordered
+metadata, metadata+logic, and safe-profile runs completed for both configured
+databases on 2026-09-07 using release `0.3.1`. Both safe-profile masking audits and
+independent re-audits passed with zero violations, including the DB1 column that
+triggered the earlier containment failure. Explicit Git exports use the default
+`exclude` policy, contain no sample payload CSVs or configured identity/credential
+strings, and pass checksum verification. A three-run DB1 comparison and static HTML
+export also passed. Each safe-profile run truthfully retains one non-fatal warning for
+an existing broken view. The failed historical run remains local-only and unchanged.
+Prompt 15 re-audited all 183 project-owned files, all named regression classes, the
+offline quality gate, and the authorized live evidence with no unresolved P0/P1/P2.
+This readiness declaration does not create a Git commit, tag, release, or deployment.
 
 ## Install
 

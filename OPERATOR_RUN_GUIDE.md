@@ -25,18 +25,25 @@ The browser opens `http://127.0.0.1:8765/` by default. The application rejects a
 non-loopback `WEB_HOST`; do not expose it to a network interface without a separate
 security review.
 
-## Current live-revalidation gate
+## Current validation status
 
-The 2026-09-06 DB1 safe-profile validation failed its final masking audit. The code
-now reconciles the final strongest classification into earlier profile and
-low-cardinality rows and re-masks their values before finalization. Focused and full
-offline regression gates pass with release identity `0.3.1`.
+Fresh Prompt 14 validation completed on 2026-09-07 for both configured databases.
+Dry-run, connection, metadata, metadata+logic, safe-profile, independent masking
+audit, explicit exclude-samples Git export, and three-run comparison gates passed.
+The repaired DB1 classification sequence now persists masked extrema and passes its
+independent audit. Each safe-profile run records one object-level warning because the
+existing view `dbo.feespegv` has a SQL Server binding error; the view was skipped while
+all other stages continued truthfully.
 
-Live proof has not yet been repeated. Do not export the failed run, advance to DB2,
-perform the three-run live smoke, or declare v3.1 ready to freeze until a fresh DB1
-dry-run, connection, metadata, metadata+logic, and safe-profile sequence passes. The
-old failed output remains unsafe local diagnostic evidence even though Git export is
-blocked; never edit it into an apparently passing run.
+The old failed output `20260906_150848` remains unsafe local diagnostic evidence;
+never edit, share, or export it. Full-readonly was not separately authorized during
+the remediation validation and was not rerun.
+
+Prompt 15 subsequently re-audited all project-owned files, offline gates, named
+security regressions, and authorized live evidence. There are no unresolved P0/P1/P2:
+**MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE.** This means the reviewed source
+and evidence are ready for an explicit version-control/release freeze; it does not
+mean a commit, tag, deployment, or production maintenance window was created.
 
 ## Offline developer self-test
 

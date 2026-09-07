@@ -1,5 +1,13 @@
 # SchoolERP MSSQL Documenter v3.1 - Final Fine-Comb File Audit
 
+## Current decision - 2026-09-07 Prompt 15 rerun
+
+**MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE.**
+
+The earlier `NOT READY TO FREEZE` decision remains below as historical evidence of
+the defects that correctly stopped the first review. The final sections document the
+repairs, live revalidation, and complete rerun that supersede that historical verdict.
+
 Recorded: 2026-09-06  
 Repository: `Prajnanabodhini/Database_Discovery_Tool`  
 Branch: `main`  
@@ -325,3 +333,115 @@ Current gate declaration:
 Therefore the source/offline blockers are repaired, but **v3.1 is not yet declared
 ready to freeze**. Prompt 14 must restart at DB1 dry-run and proceed sequentially only
 after each live gate passes.
+
+## 2026-09-07 Prompt 14 live-validation addendum
+
+Prompt 14 was explicitly authorized after the offline repair and completed
+sequentially for both configured databases. Exact run, audit, checksum, export, sample,
+Agent, metadata, warning, and comparison evidence is recorded in
+`V3_1_REMEDIATION_REPORT.md`.
+
+- DB1 safe-profile `20260907_015218`: 20/20 stages, audit PASS, independent re-audit
+  PASS, former failing PII profile extrema masked, one broken-view warning.
+- DB2 safe-profile `20260907_015839`: 20/20 stages, audit PASS, independent re-audit
+  PASS, one broken-view warning.
+- both explicit Git exports: `exclude` policy, zero sample payload CSVs, zero configured
+  identity/credential hits, independent audit and checksums PASS;
+- DB1 A/B/C production comparison: PASS with the expected mixed-mode warning, two
+  multi-event rows, static script-free export, and HTTP 200 local safe-renderer route;
+- full-readonly was not separately authorized and was not run;
+- failed historical run `20260906_150848` remains unchanged and ineligible for export.
+
+This addendum closes the prior live-validation blocker but does not replace or silently
+rewrite the historical Prompt 15 verdict. A fresh Prompt 15 fine-comb review is still
+required before any `READY TO FREEZE` declaration.
+
+## 2026-09-07 Prompt 15 final fine-comb rerun
+
+Status: **PASS**
+
+The previous exhaustive purpose/caller/read/write/DB/Web/safety/test/status matrices
+were revalidated against the current tree rather than discarded. Current inventory is
+183 project-owned files with no generated runtime or environment state included:
+
+| Class | Files | Audit result |
+|---|---:|---|
+| Production Python | 52 | PASS |
+| Web templates/static assets | 13 | PASS |
+| Tests | 25 | PASS |
+| Configuration/packaging/CI | 7 | PASS |
+| Root launchers, reports, audits, and documentation | 14 | PASS |
+| Prompt/specification pack files | 72 | PASS |
+| **Total** | **183** | **PASS** |
+
+The one-file increase from the original 182-file audit is durable audit/report state
+created during remediation; no egg-info, cache, bytecode, output, Git export,
+virtual-environment, or `.env` file was misclassified as project source. All 20 entries
+in `PACK_CHECKSUMS.sha256` independently match.
+
+### Named regression disposition
+
+| Search area | Final result |
+|---|---|
+| Eager directory creation / startup output or export | PASS: import, `create_app`, help, self-test, dry-run, and in-memory comparison remain lazy; exact runtime fingerprints unchanged |
+| Arbitrary SQL / unguarded cursor | PASS: 35 registered queries validate SELECT-only; every execution path reaches `ReadOnlyCursor`; `executemany` denied |
+| Discovered-code or SQL Agent execution | PASS: stored definitions and Agent commands are static text inputs only; persisted Agent evidence has no raw command field |
+| Shell / unsafe subprocess | PASS: no `os.system`, production `eval`/`exec`, `Popen`, or `shell=True`; only fixed-argv explicit self-test uses subprocess |
+| Secrets / raw samples | PASS: configured-value scan found zero project-source hits; evidence/export audits pass; raw Git-export sample mode does not exist |
+| Misleading report action | PASS: selected-run regeneration is offline, versioned, contained, source-hash guarded, and DB-independent |
+| Script-dependent comparison HTML | PASS: exported report source has zero scripts and remains readable after all surrounding UI scripts are removed |
+| Safe/full mode aliasing | PASS: independently resolved policies and hard ceilings; full mode must be materially deeper |
+| Monolithic leftovers | PASS with accepted maintainability note: 364-line `fullrun.py` owns lifecycle/orchestration; cohesive domain registries/stages remain separate |
+| Runtime pytest coupling | PASS: discovery runtime never invokes pytest; only explicit self-test/CI does |
+| Missing MSSQL metadata contracts | PASS: query, feature-state, artifact, capability, comparison, and tests cover all required families |
+| Two-run assumptions / three-run filter gaps | PASS: exactly 2/3 runs, A-B/B-C/A-C intervals, multi-event filters, totals, exports, and Web API are covered |
+| Missing CI | PASS: Windows/Python 3.11 workflow compiles/imports/tests offline and rejects runtime-root creation without secrets/live DB |
+| Publication/path containment | PASS: shared guard and junction/symlink regressions cover Git, comparison, regeneration, and file browsing |
+| Late sensitivity reconciliation | PASS: strongest final category is reconciled and earlier profile/low-cardinality values are re-masked; unit and live DB1 proof pass |
+| Release identity | PASS: project, package, installed distribution, inventory, and reporting use `0.3.1` |
+
+### Final offline evidence
+
+- Python 3.13.14; project requirement Python 3.11+;
+- `pip check`: no broken requirements;
+- compile/import/application factory/version agreement: PASS;
+- launcher help and 35-query non-connecting dry-run: PASS;
+- explicit self-test: **159 passed, 2 skipped, 241 subtests**;
+- independent full offline suite: **159 passed, 2 skipped, 241 subtests**;
+- two skips are Windows symlink-creation permission cases; real junction containment
+  tests pass;
+- output and Git-export inventory fingerprints remained unchanged.
+
+### Final live evidence
+
+- DB1 runs: metadata `20260907_014959`, metadata+logic `20260907_015059`,
+  safe-profile `20260907_015218`;
+- DB2 runs: metadata `20260907_015651`, metadata+logic `20260907_015735`,
+  safe-profile `20260907_015839`;
+- both safe-profile runs: 20/20 stages, zero errors, generated and independent audits
+  PASS with zero violations, all checksums valid;
+- each safe-profile run has one accepted object-level warning for the existing broken
+  `dbo.feespegv` view; the affected sample is explicitly unavailable and other stages
+  remain valid;
+- DB1 former P1 identity is final PII/PSEUDONYMIZE/HIGH with masked extrema;
+- both explicit Git exports use `exclude`, contain zero sample payload CSVs and zero
+  configured identity/credential hits, and pass audit/checksum validation;
+- three-run comparison: 44 categories, 13,147 rows, all status filters exercised, two
+  multi-event rows, static script-free HTML/CSV/JSON, local route HTTP 200 and readable
+  after script removal;
+- interactive visual browser control was unavailable and is not claimed; the actual
+  local renderer route and script-independent presentation contract passed;
+- full-readonly was not separately authorized in Prompt 14 and was not rerun.
+
+### Final severity and freeze gate
+
+- unresolved P0: **0**;
+- unresolved P1: **0**;
+- unresolved P2: **0**;
+- offline gates: **PASS**;
+- authorized live gates: **PASS WITH TWO DOCUMENTED OBJECT-LEVEL VIEW WARNINGS**;
+- required documentation: **PASS**;
+- historical failed evidence: preserved, local-only, and excluded from export/compare;
+- source commit/tag/release/deployment action: not requested and not performed.
+
+**MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE**

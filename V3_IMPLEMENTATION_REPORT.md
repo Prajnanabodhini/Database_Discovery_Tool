@@ -20,8 +20,11 @@ Fresh offline evidence on 2026-09-07:
 - self-test reported no connection attempt and no output/export creation;
 - existing runtime-root file counts remained unchanged.
 
-The historical failed run was not edited or exported. Fresh live DB1 revalidation is
-pending explicit authorization, so this addendum does not declare v3.1 ready to freeze.
+The historical failed run was not edited or exported. Prompt 14 was subsequently
+authorized and passed for both databases; exact evidence is in
+`V3_1_REMEDIATION_REPORT.md`. Prompt 15 then re-audited all 183 project-owned files,
+offline gates, named regressions, and live evidence with no unresolved P0/P1/P2.
+Current disposition: **MSSQL DOCUMENTATION TOOL v3.1 — READY TO FREEZE**.
 
 ## 2026-08-31 repair verification
 
